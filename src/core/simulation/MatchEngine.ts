@@ -3,7 +3,7 @@ import type { Player } from "../domain/Player";
 import type { MatchStats } from "../domain/Stats";
 import type { GameTactics } from '../domain/Tactics';
 import { type DraftResult } from './DraftEngine';
-import type { Champion } from '../domain/Champions';
+import { Champion, CHAMPIONS_DB } from '../domain/Champions';
 
 export interface FullMatchResult {
     matchId: string;
@@ -12,7 +12,7 @@ export interface FullMatchResult {
     redScore: number;  
     duration: number;  
     log: string[];
-    playerStats: Map<string, MatchStats>;
+    playerStats: MatchStats[];
     homeTeamId: string;
     awayTeamId: string;
 }
@@ -24,7 +24,6 @@ const CS_DISTRIBUTION = { 'ADC': 1.15, 'MID': 1.0, 'TOP': 0.9, 'JUNGLE': 0.65, '
 
 const roll = (min: number, max: number) => Math.floor(Math.random() * (max - min + 1)) + min;
 
-// Helper de Distribuição
 const distributeIntegerPool = (totalPool: number, players: Player[], weightsRef: Record<string, number>): number[] => {
     if (totalPool === 0 || players.length === 0) return players.map(() => 0);
     const rawWeights = players.map(p => weightsRef[p?.role || 'MID'] || 0.1);
@@ -50,18 +49,17 @@ export const simulateMatch = (
     homeTeamId: string,
     awayTeamId: string,
     tactics?: GameTactics,
-    draftResult?: DraftResult
+    draftResult?: DraftResult,
+    forcedMatchId?: string
 ): FullMatchResult => {
     
-    const matchId = uuidv4();
+    const matchId = forcedMatchId || uuidv4();
     const log: string[] = [];
 
-    // --- SEGURANÇA ---
     if (!draftResult) {
         console.error(`🚨 CRITICAL: Match ${matchId} running WITHOUT Draft Result!`);
     }
     
-    // --- FASE 1: Vencedor ---
     let bluePower = 0;
     let redPower = 0;
     let aggressiveness = tactics?.style === 'AGGRESSIVE' ? 1.3 : (tactics?.style === 'DEFENSIVE' ? 0.7 : 1.0);
@@ -80,7 +78,6 @@ export const simulateMatch = (
     const winner = totalBlue > totalRed ? 'BLUE' : 'RED';
     const duration = roll(22, 45);
 
-    // --- FASE 2: Placar ---
     const baseKillsPerMin = roll(8, 14) / 10;
     const totalGameKills = Math.floor(duration * baseKillsPerMin * aggressiveness);
     const winnerShare = roll(60, 75) / 100;
@@ -94,41 +91,43 @@ export const simulateMatch = (
     const blueDeathsArray = distributeIntegerPool(redTotalKills, blueTeam, DEATH_WEIGHTS);
     const redDeathsArray = distributeIntegerPool(blueTotalKills, redTeam, DEATH_WEIGHTS);
 
-    const playerStats = new Map<string, MatchStats>();
+    const playerStats: MatchStats[] = [];
 
-    // --- FASE 3: Stats Individuais ---
     const generateFullPlayerStats = (
         player: Player, 
         myIndex: number,
-        teamPlayers: Player[],
+        _teamPlayers: Player[],
         myKills: number, 
         myDeaths: number,
         teamKillsArray: number[], 
         isWinner: boolean
     ): MatchStats => {
         
-        // 1. DETERMINAR CAMPEÃO
         let champName = "Unknown";
         let champData: Champion | undefined;
 
         if (draftResult) {
-            champData = draftResult.bluePicks.get(player.id) || draftResult.redPicks.get(player.id);
+            const pickId = draftResult.bluePicks.get(player.id) || draftResult.redPicks.get(player.id);
+            
+            if (pickId) {
+                champData = CHAMPIONS_DB.find(c => c.id === pickId);
+            }
+
             if (champData) {
                 champName = champData.name;
             } else {
                 champName = player.championPool[0]?.championName || "Minion";
+                champData = CHAMPIONS_DB.find(c => c.name === champName);
             }
         } else {
             champName = player.championPool[0]?.championName || "Random";
+            champData = CHAMPIONS_DB.find(c => c.name === champName);
         }
 
         const role = player.role || 'MID';
 
-        // 2. Performance baseada no Draft
         let performanceMod = 1.0; 
         if (champData) {
-            // FIX: Usamos (role as any) aqui para silenciar o erro de compatibilidade de Tipos
-            // O TS reclama que 'Role' (do Player) não é 'ChampionRole' (do Champion), mas são as mesmas strings.
             const isMainRole = champData.roles.includes(role as any);
             
             if (!isMainRole) performanceMod -= 0.20; 
@@ -137,7 +136,6 @@ export const simulateMatch = (
             else performanceMod -= 0.05;
         }
 
-        // 3. Assists e Ouro
         let myAssists = 0;
         const participationRate = ASSIST_PARTICIPATION_BASE[role] + (roll(-10, 10)/100);
         teamKillsArray.forEach((teammateKills, idx) => {
@@ -160,25 +158,82 @@ export const simulateMatch = (
         
         const damageRoleMod = role === 'SUPPORT' ? 0.6 : (role === 'ADC' || role === 'MID') ? 1.3 : 0.9;
         const myDmg = Math.floor(((myGold * damageRoleMod * (roll(90, 110)/100)) + roll(1000, 3000)) * performanceMod);
+
+        const visionScore = role === 'SUPPORT' ? Math.floor(duration * 2.5) : Math.floor(duration * 0.8);
         
-        const kdaRatio = (myKills + myAssists) / Math.max(1, myDeaths);
-        let ratingRaw = (kdaRatio * 0.7) + ((csPerMin/10)*2) + (isWinner?1:0) + (role==='SUPPORT'?2:0);
-        const rating = Math.min(10, Math.max(1, ratingRaw + (roll(-15, 15)/10)));
+        // 1. Nota Base (Mais baixa para evitar inflação)
+        let rating = 6.0; 
+
+        // 2. Impacto de Mortes (Muito punitivo)
+        // Suportes toleram mais mortes (sacrifício), Carries são punidos severamente.
+        const deathPenalty = role === 'SUPPORT' ? 0.35 : 0.50;
+        rating -= (myDeaths * deathPenalty);
+
+        // 3. Impacto de Kills (Logarítmico - Diminishing Returns)
+        // Evita que 20 kills dê +10 pontos direto.
+        // Fórmula: log2(kills + 1) * peso
+        if (myKills > 0) {
+            const killWeight = (role === 'ADC' || role === 'MID') ? 0.5 : 0.4;
+            rating += Math.log2(myKills + 1) * killWeight;
+        }
+
+        // 4. Impacto de Assists
+        if (myAssists > 0) {
+            const assistWeight = (role === 'SUPPORT' || role === 'JUNGLE') ? 0.35 : 0.15;
+            rating += Math.log2(myAssists + 1) * assistWeight;
+        }
+
+        // 5. Farm (Exigente)
+        if (role !== 'SUPPORT' && role !== 'JUNGLE') {
+            const cspm = myCs / duration; 
+            if (cspm >= 10.0) rating += 1.0;      // Perfeito (Chovy level)
+            else if (cspm >= 8.5) rating += 0.5;  // Pro standard
+            else if (cspm < 6.5) rating -= 0.5;   // Ruim
+            else if (cspm < 5.0) rating -= 1.0;   // Horrível
+        }
+
+        // 6. Participação em Kills (KP%)
+        const teamTotalKills = teamKillsArray.reduce((a,b) => a+b, 0);
+        if (teamTotalKills > 2) { // Só avalia se teve jogo
+            const kp = (myKills + myAssists) / teamTotalKills;
+            if (kp > 0.80) rating += 0.5; // Está em todas
+            else if (kp < 0.15 && role !== 'TOP') rating -= 0.5; // AFK farming
+        }
+
+        // 7. Eficiência de Dano (Só ganha ponto se carregar)
+        if (role !== 'SUPPORT') {
+            const dmgPerGold = myDmg / Math.max(1, myGold);
+            if (dmgPerGold > 1.5) rating += 0.4; // Deu muito dano com o ouro que tinha
+            else if (dmgPerGold < 0.6) rating -= 0.3; // Tem ouro mas não bate
+        }
+
+        // 8. Bônus/Malus de Resultado
+        if (isWinner) rating += 0.3;
+        else rating -= 0.2; // Perder dói
+
+        // 9. Clamp Final (Limites Rígidos)
+        // É quase impossível tirar 10. Precisa de KDA perfeito + Farm 10/min + Win.
+        // Nota mínima 2.5 (Troll).
+        rating = Math.max(2.5, Math.min(10.0, rating));
+
+        // Arredonda para 1 casa decimal
+        rating = parseFloat(rating.toFixed(1));
 
         return {
-            matchId, day, opponentTeamId: winner === 'BLUE' ? awayTeamId : homeTeamId,
+            matchId, playerId: player.id, day, opponentTeamId: winner === 'BLUE' ? awayTeamId : homeTeamId,
             result: isWinner ? 'WIN' : 'LOSS', championName: champName,
             kills: myKills, deaths: myDeaths, assists: myAssists,
             cs: myCs, gold: myGold, damage: myDmg, duration,
-            visionScore: Math.floor(duration * 1.5), rating: parseFloat(rating.toFixed(1))
+            visionScore,
+            rating
         };
     };
 
     blueTeam.forEach((p, i) => {
-        if(p) playerStats.set(p.id, generateFullPlayerStats(p, i, blueTeam, blueKillsArray[i], blueDeathsArray[i], blueKillsArray, winner === 'BLUE'));
+        if(p) playerStats.push(generateFullPlayerStats(p, i, blueTeam, blueKillsArray[i], blueDeathsArray[i], blueKillsArray, winner === 'BLUE'));
     });
     redTeam.forEach((p, i) => {
-        if(p) playerStats.set(p.id, generateFullPlayerStats(p, i, redTeam, redKillsArray[i], redDeathsArray[i], redKillsArray, winner === 'RED'));
+        if(p) playerStats.push(generateFullPlayerStats(p, i, redTeam, redKillsArray[i], redDeathsArray[i], redKillsArray, winner === 'RED'));
     });
 
     return {

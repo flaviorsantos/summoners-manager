@@ -3,29 +3,26 @@ import type { Player } from "../domain/Player";
 const GAMES_PER_DAY_MIN = 1;
 const GAMES_PER_DAY_MAX = 10;
 
+const getTargetLP = (overall: number) => {
+    if (overall < 80) return 0;
+    return (overall - 80) * 110; 
+};
+
 export const initializeSoloQ = (player: Player) => {
-    let lp = 0;
+    const target = getTargetLP(player.overall);
+    const startingLP = Math.max(0, target - 200); 
+
     let rank: 'CHALLENGER' | 'GRANDMASTER' | 'MASTER' = 'MASTER';
-    
-    if (player.overall >= 90) { 
-        rank = 'CHALLENGER'; 
-        lp = 800 + Math.floor(Math.random() * 400); 
-    } else if (player.overall >= 85) { 
-        rank = 'GRANDMASTER'; 
-        lp = 400 + Math.floor(Math.random() * 400); 
-    } else { 
-        rank = 'MASTER'; 
-        lp = Math.floor(Math.random() * 400); 
-    }
+    if (startingLP >= 900) rank = 'CHALLENGER';
+    else if (startingLP >= 500) rank = 'GRANDMASTER';
 
     player.soloQ = {
         rankTier: rank,
-        lp: lp,
+        lp: startingLP,
         wins: 0,
         losses: 0
     };
 };
-
 export const simulateDailySoloQ = (players: Player[]) => {
     players.forEach(p => {
         if (!p.soloQ) initializeSoloQ(p);
@@ -33,18 +30,29 @@ export const simulateDailySoloQ = (players: Player[]) => {
         const gamesToday = Math.floor(Math.random() * (GAMES_PER_DAY_MAX - GAMES_PER_DAY_MIN + 1)) + GAMES_PER_DAY_MIN;
         
         for (let i = 0; i < gamesToday; i++) {
-            const mechanicBonus = (p.attributes.mechanics - 50) / 2.5; // Ex: 90 mecânica = +16% chance
+            const mechanicBonus = (p.attributes.mechanics - 50) / 2.5; 
             const winChance = 50 + mechanicBonus;
-            
             const roll = Math.random() * 100;
+            const isWin = roll <= winChance;
 
-            if (roll <= winChance) {
+            const targetLP = getTargetLP(p.overall);
+            const currentLP = p.soloQ!.lp;
+            const diff = targetLP - currentLP;
+
+            const correction = Math.floor(diff / 20); 
+
+            let lpChange = 0;
+
+            if (isWin) {
                 p.soloQ!.wins++;
-                p.soloQ!.lp += Math.floor(Math.random() * 6) + 15; 
+                lpChange = 20 + correction;
+                lpChange = Math.max(10, Math.min(35, lpChange)); 
+                p.soloQ!.lp += lpChange;
             } else {
                 p.soloQ!.losses++;
-                const loss = Math.floor(Math.random() * 6) + 14;
-                p.soloQ!.lp = Math.max(0, p.soloQ!.lp - loss);
+                lpChange = 20 - correction;
+                lpChange = Math.max(10, Math.min(35, lpChange)); 
+                p.soloQ!.lp = Math.max(0, p.soloQ!.lp - lpChange);
             }
         }
 

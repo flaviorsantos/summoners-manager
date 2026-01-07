@@ -69,20 +69,19 @@ export const generatePlayer = (forcedRole?: Role): Player => {
     return {
         id: uuidv4(),
         name: `${FIRST_NAMES[randomInt(0, FIRST_NAMES.length-1)]}`,
-        nickname: NICKS[randomInt(0, NICKS.length-1)] + randomInt(1, 99),
+        nickname: `${NICKS[randomInt(0, NICKS.length-1)]}${randomInt(1, 99)}`,
+        
+        gender: Math.random() > 0.9 ? 'FEMALE' : 'MALE', 
+
         age,
-        gender: 'M',
+        country: 'KR', 
         role: role!,
         team: 'Free Agent',
         overall,
         potential,
-        contract: {
-            salary: overall * 1000 + randomInt(0, 5000),
-            expires: 2026
-        },
         attributes,
         championPool,
-        matchHistory: [],
-        championStats: []
+        contract: { salary: overall * 1000, expires: 1 },
+        matchHistory: []
     };
 }

@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue';
-import { useRouter } from 'vue-router';
+import { useRouter, onBeforeRouteLeave } from 'vue-router';
 import { useGameStore } from '@/ui/stores/gameStore';
 import GameLayout from '../layouts/GameLayout.vue';
-import { CHAMPIONS_DB, type Champion } from '@/core/domain/Champions';
+import { CHAMPIONS_DB } from '@/core/domain/Champions';
 import { type PlayStyle, type FocusLane } from '@/core/domain/Tactics';
 import { getRatingColorClass } from '@/core/utils/formatters';
 import type { Player } from '@/core/domain/Player';
+import { getSmartBan, getSmartPick } from '@/core/simulation/DraftEngine';
 
 const store = useGameStore();
 const router = useRouter();
@@ -15,7 +16,6 @@ const TURN_TIME = 30;
 const MY_SIDE = 'BLUE';
 
 const lobbyPhase = ref<'ROSTER' | 'DRAFT' | 'PREP'>('ROSTER');
-
 const selectedLineup = ref<Map<string, string>>(new Map()); 
 
 type DraftStep = { side: 'BLUE' | 'RED', type: 'BAN' | 'PICK', slotIdx: number };
@@ -43,28 +43,42 @@ const redPicks  = ref<Map<number, string>>(new Map());
 
 const hoveredChampId = ref<string | null>(null);
 const searchQuery = ref('');
-
 const selectedFocus = ref<FocusLane>('STANDARD');
 const selectedStyle = ref<PlayStyle>('BALANCED');
 const isSwapMode = ref(false);
 const swapSourceSlot = ref<number | null>(null);
 
 const match = computed(() => store.nextMatch);
+const enemyTeam = computed(() => store.teams.find(t => t.id === (match.value?.homeTeamId === store.myTeamId ? match.value?.awayTeamId : match.value?.homeTeamId)));
+
+// IMPORTANTE: Ordem fixa para garantir consistência (Top, Jg, Mid, Adc, Sup)
+const enemyRoster = computed(() => {
+    if (!enemyTeam.value) return [];
+    const roster: Player[] = [];
+    const roles = ['TOP', 'JUNGLE', 'MID', 'ADC', 'SUPPORT'];
+    roles.forEach(r => {
+        const p = store.players.find(pl => pl.team === enemyTeam.value!.id && pl.role === r);
+        if (p) roster.push(p);
+    });
+    return roster;
+});
+
+onBeforeRouteLeave((to, from, next) => {
+    if (lobbyPhase.value === 'DRAFT' || lobbyPhase.value === 'PREP') {
+        if (confirm("If you leave now, you will dodge the match. Are you sure?")) next();
+        else next(false);
+    } else next();
+});
 
 const availablePlayersByRole = computed(() => {
     const grouped = { 'TOP': [], 'JUNGLE': [], 'MID': [], 'ADC': [], 'SUPPORT': [] } as Record<string, Player[]>;
-    store.players
-        .filter(p => p.team === store.myTeamId)
-        .forEach(p => {
-            if (grouped[p.role]) grouped[p.role].push(p);
-        });
+    store.players.filter(p => p.team === store.myTeamId).forEach(p => { if (grouped[p.role]) grouped[p.role].push(p); });
     return grouped;
 });
 
 const activeRoster = computed(() => {
     const roles = ['TOP', 'JUNGLE', 'MID', 'ADC', 'SUPPORT'];
     const players: Player[] = [];
-    
     roles.forEach(role => {
         const playerId = selectedLineup.value.get(role);
         if (playerId) {
@@ -85,32 +99,27 @@ const statusMessage = computed(() => {
 const currentStep = computed(() => DRAFT_SEQUENCE[currentStepIndex.value]);
 const isMyTurn = computed(() => lobbyPhase.value === 'DRAFT' && currentStep.value?.side === MY_SIDE);
 
+const takenChamps = computed(() => new Set([
+    ...blueBans.value.filter(x => x), ...redBans.value.filter(x => x),
+    ...Array.from(bluePicks.value.values()), ...Array.from(redPicks.value.values())
+]));
+
 const filteredChampions = computed(() => {
     let list = CHAMPIONS_DB.filter(c => c.name.toLowerCase().includes(searchQuery.value.toLowerCase()));
-    const unavailable = new Set([
-        ...blueBans.value, ...redBans.value,
-        ...Array.from(bluePicks.value.values()), ...Array.from(redPicks.value.values())
-    ]);
-    list = list.filter(c => !unavailable.has(c.id));
+    list = list.filter(c => !takenChamps.value.has(c.id));
     return list.sort((a, b) => a.name.localeCompare(b.name));
 });
 
-const selectStarter = (role: string, playerId: string) => {
-    selectedLineup.value.set(role, playerId);
-}
+const selectStarter = (role: string, playerId: string) => { selectedLineup.value.set(role, playerId); }
 
 const confirmRoster = () => {
-    if (selectedLineup.value.size < 5) {
-        alert("You must select a player for every role!");
-        return;
-    }
+    if (selectedLineup.value.size < 5) { alert("You must select a player for every role!"); return; }
     lobbyPhase.value = 'DRAFT';
     startTimer();
 }
 
 onMounted(() => {
     if (!store.nextMatch || store.nextMatch.day !== store.day) router.push('/');
-    
     const roles = ['TOP', 'JUNGLE', 'MID', 'ADC', 'SUPPORT'];
     roles.forEach(role => {
         const candidates = availablePlayersByRole.value[role] || [];
@@ -132,13 +141,24 @@ const startTimer = () => {
 
 const handleTimeout = () => {
     if (lobbyPhase.value !== 'DRAFT') return;
+    
     if (isMyTurn.value) {
-        if (hoveredChampId.value) confirmSelection();
-        else {
-            const randomChamp = filteredChampions.value[0]; 
-            if (randomChamp) {
-                hoveredChampId.value = randomChamp.id;
-                confirmSelection();
+        if (hoveredChampId.value) {
+            confirmSelection();
+        } else {
+            // Auto Pick Seguro
+            const player = activeRoster.value[currentStep.value.slotIdx];
+            const myPicksArr = Array.from(bluePicks.value.values());
+            
+            if (currentStep.value.type === 'BAN') {
+                const random = filteredChampions.value[0];
+                if(random) { hoveredChampId.value = random.id; confirmSelection(); }
+            } else {
+                const smartResult = getSmartPick(player, takenChamps.value, myPicksArr);
+                if(smartResult && smartResult.id) { 
+                    hoveredChampId.value = smartResult.id; 
+                    confirmSelection(); 
+                }
             }
         }
     } else {
@@ -146,10 +166,7 @@ const handleTimeout = () => {
     }
 };
 
-const selectChamp = (champId: string) => {
-    if (!isMyTurn.value) return;
-    hoveredChampId.value = champId;
-};
+const selectChamp = (champId: string) => { if (isMyTurn.value) hoveredChampId.value = champId; };
 
 const confirmSelection = () => {
     if (!hoveredChampId.value) return;
@@ -171,7 +188,7 @@ const advanceTurn = () => {
         currentStepIndex.value++;
         startTimer();
         if (!isMyTurn.value) {
-            const thinkTime = Math.floor(Math.random() * 2000) + 1000; 
+            const thinkTime = Math.floor(Math.random() * 1500) + 500; 
             setTimeout(triggerAiTurn, thinkTime);
         }
     } else {
@@ -180,27 +197,121 @@ const advanceTurn = () => {
     }
 };
 
+// --- NOVA LÓGICA DE IA (CORRIGIDA) ---
 const triggerAiTurn = () => {
     if (lobbyPhase.value !== 'DRAFT' || isMyTurn.value) return;
+    
     const step = currentStep.value;
-    const available = filteredChampions.value;
-    let pick: Champion | undefined;
+    let choiceId = '';
 
-    if (available.length > 0) {
-        const slotRoles = ['TOP', 'JUNGLE', 'MID', 'ADC', 'SUPPORT'];
-        const targetRole = slotRoles[step.slotIdx];
-        if (step.type === 'BAN') {
-            pick = available[Math.floor(Math.random() * available.length)];
-        } else {
-            const roleCandidates = available.filter(c => c.roles.includes(targetRole as any));
-            pick = roleCandidates.length > 0 ? roleCandidates[Math.floor(Math.random() * roleCandidates.length)] : available[0];
+    if (step.type === 'BAN') {
+        const enemyPicksMap = new Map<string, string>();
+        bluePicks.value.forEach((champId, slot) => enemyPicksMap.set(String(slot), champId));
+        choiceId = getSmartBan(activeRoster.value, takenChamps.value, enemyPicksMap);
+        
+        if (choiceId) redBans.value[step.slotIdx] = choiceId;
+        else {
+            const rnd = filteredChampions.value[0];
+            if (rnd) redBans.value[step.slotIdx] = rnd.id;
         }
-    }
-    if (pick) {
-        if (step.type === 'BAN') redBans.value[step.slotIdx] = pick.id;
-        else redPicks.value.set(step.slotIdx, pick.id);
+        advanceTurn();
+    } else {
+        // PICK PHASE INTELIGENTE
+        const currentRedPicks = Array.from(redPicks.value.values());
+        
+        // 1. Identificar quem JÁ ESTÁ ATENDIDO.
+        // Se já pickamos Syndra, e Syndra é Mid, o Mid Laner (Slot 2) já está feliz.
+        const satisfiedPlayerIndices = new Set<number>();
+        
+        currentRedPicks.forEach(champId => {
+            const champ = CHAMPIONS_DB.find(c => c.id === champId);
+            if (!champ) return;
+
+            // Procura o melhor dono para esse champ entre os jogadores do roster
+            // Prioridade: Main Role > Off Role
+            let bestOwnerIdx = -1;
+            
+            // Tenta achar alguém da Main Role que ainda não foi marcado
+            enemyRoster.value.forEach((player, idx) => {
+                if (satisfiedPlayerIndices.has(idx)) return;
+                if (champ.roles.includes(player.role as any)) {
+                    bestOwnerIdx = idx;
+                }
+            });
+
+            // Se não achou Main Role, pega o primeiro livre (Fallback)
+            if (bestOwnerIdx === -1) {
+                enemyRoster.value.forEach((player, idx) => {
+                    if (!satisfiedPlayerIndices.has(idx)) bestOwnerIdx = idx;
+                });
+            }
+
+            if (bestOwnerIdx !== -1) satisfiedPlayerIndices.add(bestOwnerIdx);
+        });
+
+        // 2. Agora procuramos o melhor pick APENAS para quem SOBROU
+        let bestMove = { slotIdx: step.slotIdx, champId: '', score: -1 };
+
+        // Slots visuais abertos para pick (para saber quem pode pickar visualmente)
+        // Na verdade, a IA pode usar o slot atual para pegar pra QUALQUER um que faltou.
+        
+        enemyRoster.value.forEach((player, rosterIdx) => {
+            // Se esse jogador já tem boneco, PULA ELE! (Evita 2 Mids)
+            if (satisfiedPlayerIndices.has(rosterIdx)) return;
+
+            // Calcula o pick ideal para este jogador
+            const result = getSmartPick(player, takenChamps.value, currentRedPicks);
+            
+            // Prioriza Picks com maior score (Ex: Se o ADC tem pick OP, pega agora)
+            if (result.score > bestMove.score) {
+                bestMove = { slotIdx: rosterIdx, champId: result.id, score: result.score };
+            }
+        });
+
+        if (bestMove.champId) {
+            redPicks.value.set(step.slotIdx, bestMove.champId);
+        } else {
+            const rnd = filteredChampions.value[0];
+            if (rnd) redPicks.value.set(step.slotIdx, rnd.id);
+        }
         advanceTurn();
     }
+};
+
+// --- REORDENAÇÃO ROBUSTA (EVITA SYNDRA TOP) ---
+const reorderEnemyComp = (picksMap: Map<number, string>, roster: Player[]): Map<number, string> => {
+    const finalPicks = new Map<number, string>();
+    const availableChamps = Array.from(picksMap.values());
+    const assignedChamps = new Set<string>();
+
+    // Passo 1: Match Perfeito (Role Principal)
+    // Itera sobre os jogadores e tenta dar a eles um champ da Main Role deles
+    roster.forEach((player, rosterIdx) => {
+        const perfectMatch = availableChamps.find(cId => {
+            if (assignedChamps.has(cId)) return false;
+            const c = CHAMPIONS_DB.find(db => db.id === cId);
+            return c && c.roles.includes(player.role as any);
+        });
+
+        if (perfectMatch) {
+            finalPicks.set(rosterIdx, perfectMatch);
+            assignedChamps.add(perfectMatch);
+        }
+    });
+
+    // Passo 2: Match Secundário (Tenta encaixar o que sobrou)
+    roster.forEach((player, rosterIdx) => {
+        if (finalPicks.has(rosterIdx)) return; // Já tem
+
+        // Pega qualquer um que sobrou
+        const leftover = availableChamps.find(cId => !assignedChamps.has(cId));
+        if (leftover) {
+            finalPicks.set(rosterIdx, leftover);
+            assignedChamps.add(leftover);
+        }
+    });
+
+    return finalPicks;
 };
 
 const handleSlotClick = (slotIdx: number) => {
@@ -226,12 +337,39 @@ const handleStartMatch = () => {
         if (champId) finalPicks.set(player.id, champId);
     });
 
+    // Aplica a reordenação inteligente antes de enviar
+    const organizedRedPicks = reorderEnemyComp(redPicks.value, enemyRoster.value);
+
+    // Converte Map<Index, Champ> para Map<PlayerID, Champ>
+    const enemyPicksById = new Map<string, string>();
+    organizedRedPicks.forEach((champId, idx) => {
+        if (enemyRoster.value[idx]) {
+            enemyPicksById.set(enemyRoster.value[idx].id, champId);
+        }
+    });
+
+    // Passamos o enemyPicksById como enemyPicks para a store
+    // Nota: A store espera Map<string, string> (ID->ID) ou Map<number, string> dependendo da versão
+    // O simulateDraft aceita Map<number, string> no enemyPicks do DraftOrders?
+    // Verificando DraftEngine.ts: enemyPicks?: Map<number, string>; // SlotIdx -> ChampID
+    // Então passamos o organizedRedPicks direto.
+
     store.playLeagueMatch(
         { focus: selectedFocus.value, style: selectedStyle.value },
-        { myBans: blueBans.value.filter(b => b), myPicks: finalPicks },
+        { 
+            myBans: blueBans.value.filter(b => b), 
+            myPicks: finalPicks, 
+            enemyPicks: organizedRedPicks, 
+            enemyBans: redBans.value.filter(b => b) 
+        },
         activeRoster.value
     );
-    router.push('/');
+    
+    if (store.lastMatchResult) {
+         router.replace({ name: 'match-details', params: { id: store.lastMatchResult.matchId } });
+    } else {
+         router.push('/');
+    }
 };
 
 onUnmounted(() => clearInterval(timerInterval));
@@ -266,11 +404,9 @@ const getSlotClass = (side: string, type: string, idx: number) => {
         <div v-if="lobbyPhase === 'ROSTER'" class="max-w-4xl mx-auto py-8">
              <div class="bg-gray-800 rounded-lg border border-gray-700 p-8 shadow-2xl">
                 <h2 class="text-xl font-bold text-white mb-6 border-b border-gray-700 pb-2">Who will start today?</h2>
-                
                 <div class="space-y-6">
                     <div v-for="role in ['TOP', 'JUNGLE', 'MID', 'ADC', 'SUPPORT']" :key="role" class="flex items-center gap-6">
                         <div class="w-24 text-right font-bold text-gray-400 text-lg">{{ role }}</div>
-                        
                         <div class="flex-1 flex gap-4 overflow-x-auto pb-2">
                             <div v-for="player in availablePlayersByRole[role] || []" :key="player.id"
                                  @click="selectStarter(role, player.id)"
@@ -281,24 +417,17 @@ const getSlotClass = (side: string, type: string, idx: number) => {
                                 <div class="text-xs text-gray-400">OVR: <span :class="getRatingColorClass(player.overall)">{{ player.overall }}</span></div>
                                 <div v-if="selectedLineup.get(role) === player.id" class="absolute top-2 right-2 text-blue-400">●</div>
                             </div>
-                            
-                            <div v-if="(!availablePlayersByRole[role] || availablePlayersByRole[role].length === 0)" class="text-red-500 text-sm italic py-4">
-                                No player for this role!
-                            </div>
+                            <div v-if="(!availablePlayersByRole[role] || availablePlayersByRole[role].length === 0)" class="text-red-500 text-sm italic py-4">No player!</div>
                         </div>
                     </div>
                 </div>
-
                 <div class="mt-8 flex justify-end">
-                    <button @click="confirmRoster" class="bg-green-600 hover:bg-green-500 text-white px-8 py-3 rounded font-bold text-xl shadow-lg">
-                        CONFIRM LINEUP ->
-                    </button>
+                    <button @click="confirmRoster" class="bg-green-600 hover:bg-green-500 text-white px-8 py-3 rounded font-bold text-xl shadow-lg">CONFIRM LINEUP -></button>
                 </div>
              </div>
         </div>
 
         <div v-else class="grid grid-cols-12 gap-4 h-[75vh]">
-            
             <div class="col-span-3 flex flex-col gap-2">
                 <div class="flex gap-1 mb-2 justify-start">
                     <div v-for="(ban, idx) in blueBans" :key="'b-ban-'+idx" class="w-10 h-10 border border-gray-600 rounded overflow-hidden relative" :class="getSlotClass('BLUE', 'BAN', idx)">
@@ -307,18 +436,9 @@ const getSlotClass = (side: string, type: string, idx: number) => {
                     </div>
                 </div>
                 <div class="flex-1 flex flex-col gap-2">
-                    <div v-for="(player, idx) in activeRoster" :key="'b-pick-'+idx" 
-                         @click="handleSlotClick(idx)"
-                         class="flex-1 rounded border relative overflow-hidden flex items-center p-2 transition-all cursor-default"
-                         :class="[getSlotClass('BLUE', 'PICK', idx), isSwapMode ? 'cursor-pointer hover:border-yellow-400' : 'border-gray-700', swapSourceSlot === idx ? 'border-yellow-500 bg-yellow-900/30' : '']">
-                        
-                        <div v-if="bluePicks.has(idx)" class="absolute inset-0 z-0">
-                            <img :src="getChampBack(bluePicks.get(idx)!)" class="w-full h-full object-cover object-[80%_20%] opacity-50 ">
-                        </div>
-                        <div v-else-if="lobbyPhase === 'DRAFT' && isMyTurn && currentStep.type === 'PICK' && currentStep.slotIdx === idx && hoveredChampId" class="absolute inset-0 z-0">
-                             <img :src="getChampBack(hoveredChampId)" class="w-full h-full object-cover opacity-20 animate-pulse">
-                        </div>
-
+                    <div v-for="(player, idx) in activeRoster" :key="'b-pick-'+idx" @click="handleSlotClick(idx)" class="flex-1 rounded border relative overflow-hidden flex items-center p-2 transition-all cursor-default" :class="[getSlotClass('BLUE', 'PICK', idx), isSwapMode ? 'cursor-pointer hover:border-yellow-400' : 'border-gray-700', swapSourceSlot === idx ? 'border-yellow-500 bg-yellow-900/30' : '']">
+                        <div v-if="bluePicks.has(idx)" class="absolute inset-0 z-0"><img :src="getChampBack(bluePicks.get(idx)!)" class="w-full h-full object-cover object-[80%_20%] opacity-50"></div>
+                        <div v-else-if="lobbyPhase === 'DRAFT' && isMyTurn && currentStep.type === 'PICK' && currentStep.slotIdx === idx && hoveredChampId" class="absolute inset-0 z-0"><img :src="getChampBack(hoveredChampId)" class="w-full h-full object-cover object-[80%_20%] opacity-20 animate-pulse"></div>
                         <div class="relative z-10 flex items-center gap-3 w-full">
                             <div class="w-12 h-12 bg-gray-900 rounded-full border-2 border-gray-600 flex items-center justify-center overflow-hidden">
                                 <img v-if="bluePicks.has(idx)" :src="getChampImage(bluePicks.get(idx)!)" class="w-full h-full object-cover">
@@ -326,16 +446,13 @@ const getSlotClass = (side: string, type: string, idx: number) => {
                             </div>
                             <div>
                                 <div class="text-[10px] text-blue-300 font-bold uppercase">{{ player.role }} | {{ player.nickname }}</div>
-                                <div class="font-bold text-white text-lg shadow-black drop-shadow-md leading-none">
-                                    {{ bluePicks.get(idx) ? CHAMPIONS_DB.find(c => c.id === bluePicks.get(idx))?.name : '...' }}
-                                </div>
+                                <div class="font-bold text-white text-lg shadow-black drop-shadow-md leading-none">{{ bluePicks.get(idx) ? CHAMPIONS_DB.find(c => c.id === bluePicks.get(idx))?.name : '...' }}</div>
                             </div>
                         </div>
                         <div v-if="isSwapMode" class="absolute right-2 text-yellow-500 animate-bounce">⇄</div>
                     </div>
                 </div>
             </div>
-
             <div class="col-span-6 bg-gray-800 rounded-lg border border-gray-700 flex flex-col overflow-hidden relative">
                 <div v-if="lobbyPhase === 'DRAFT'" class="flex flex-col h-full">
                     <div class="p-3 bg-gray-900 border-b border-gray-700 flex gap-4">
@@ -377,7 +494,6 @@ const getSlotClass = (side: string, type: string, idx: number) => {
                     <button @click="handleStartMatch" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-4 rounded-lg shadow-xl text-xl tracking-widest transition-transform active:scale-95 mt-auto">START MATCH</button>
                 </div>
             </div>
-
             <div class="col-span-3 flex flex-col gap-2">
                 <div class="flex gap-1 mb-2 justify-end">
                     <div v-for="(ban, idx) in redBans" :key="'r-ban-'+idx" class="w-10 h-10 border border-gray-600 rounded overflow-hidden relative" :class="getSlotClass('RED', 'BAN', idx)">
@@ -387,9 +503,7 @@ const getSlotClass = (side: string, type: string, idx: number) => {
                 </div>
                 <div class="flex-1 flex flex-col gap-2">
                     <div v-for="i in 5" :key="'r-pick-'+(i-1)" class="flex-1 rounded border border-gray-700 relative overflow-hidden flex items-center p-2 justify-end transition-all" :class="getSlotClass('RED', 'PICK', i-1)">
-                        <div v-if="redPicks.has(i-1)" class="absolute inset-0 z-0">
-                            <img :src="getChampImage(redPicks.get(i-1)!)" class="w-full h-full object-cover opacity-50">
-                        </div>
+                        <div v-if="redPicks.has(i-1)" class="absolute inset-0 z-0"><img :src="getChampBack(redPicks.get(i-1)!)" class="w-full h-full object-cover object-[80%_20%] opacity-50"></div>
                         <div class="relative z-10 flex items-center gap-3 w-full flex-row-reverse text-right">
                             <div class="w-12 h-12 bg-gray-900 rounded-full border-2 border-gray-600 flex items-center justify-center">
                                 <span v-if="!redPicks.has(i-1)" class="text-gray-500 font-bold text-lg">{{ i }}</span>
@@ -397,9 +511,7 @@ const getSlotClass = (side: string, type: string, idx: number) => {
                             </div>
                             <div>
                                 <div class="text-xs text-red-300 font-bold uppercase">Red Pick {{ i }}</div>
-                                <div class="font-bold text-white text-lg shadow-black drop-shadow-md">
-                                    {{ redPicks.get(i-1) ? CHAMPIONS_DB.find(c => c.id === redPicks.get(i-1))?.name : '...' }}
-                                </div>
+                                <div class="font-bold text-white text-lg shadow-black drop-shadow-md">{{ redPicks.get(i-1) ? CHAMPIONS_DB.find(c => c.id === redPicks.get(i-1))?.name : '...' }}</div>
                             </div>
                         </div>
                     </div>
@@ -408,8 +520,3 @@ const getSlotClass = (side: string, type: string, idx: number) => {
         </div>
     </GameLayout>
 </template>
-
-<style scoped>
-.animate-fade-in { animation: fadeIn 0.5s ease-out; }
-@keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-</style>

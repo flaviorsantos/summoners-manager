@@ -30,18 +30,19 @@ const redTeamColor = computed(() => {
 
 const getChampImage = (champName: string) => {
     const champ = CHAMPIONS_DB.find(c => c.name === champName);
-    
     const validId = champ ? champ.id : champName.replace(/[^a-zA-Z0-9]/g, '');
-    
     return `https://ddragon.leagueoflegends.com/cdn/14.1.1/img/champion/${validId}.png`;
 };
 
+// 👇 CORREÇÃO AQUI
 const processStats = () => {
     if (!match.value) return [];
     const list: any[] = [];
     
-    match.value.playerStats.forEach((stat, playerId) => {
-        const player = store.players.find(p => p.id === playerId);
+    // O playerStats agora é um Array. Iteramos apenas o stat.
+    match.value.playerStats.forEach((stat) => {
+        // Usamos o stat.playerId para achar o jogador, e não o índice
+        const player = store.players.find(p => p.id === stat.playerId);
         list.push({ ...stat, player: player || { nickname: 'Unknown', role: '?' } }); 
     });
     return list;
@@ -132,7 +133,7 @@ const getKda = (k: number, d: number, a: number) => ((k+a)/Math.max(1,d)).toFixe
                                             alt="Champ"
                                         >
                                         <div class="absolute -bottom-1 -right-1 bg-gray-900 text-gray-400 text-[10px] px-1 rounded border border-gray-700 font-bold">
-                                            {{ stat.player.role.substring(0,1) }}
+                                            {{ stat.player.role ? stat.player.role.substring(0,1) : '?' }}
                                         </div>
                                     </div>
                                     <div>
@@ -178,7 +179,7 @@ const getKda = (k: number, d: number, a: number) => ((k+a)/Math.max(1,d)).toFixe
                                             alt="Champ"
                                         >
                                         <div class="absolute -bottom-1 -right-1 bg-gray-900 text-gray-400 text-[10px] px-1 rounded border border-gray-700 font-bold">
-                                            {{ stat.player.role.substring(0,1) }}
+                                            {{ stat.player.role ? stat.player.role.substring(0,1) : '?' }}
                                         </div>
                                     </div>
                                     <div>

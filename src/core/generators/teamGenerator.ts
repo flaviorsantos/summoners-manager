@@ -8,7 +8,7 @@ const LEAGUE_TEAMS = [
     { name: "FURIA", acronym: "FUR", color: "bg-black" },
     { name: "Leviatan", acronym: "LEV", color: "bg-blue-900" },
     { name: "Vivo Keyd Stars", acronym: "VKS", color: "bg-purple-700" },
-    { name: "Fluxo W7M", acronym: "FX", color: "bg-purple-900" },
+    { name: "Fluxo W7M", acronym: "FW7M", color: "bg-purple-900" },
     { name: "Los Grandes", acronym: "LOS", color: "bg-orange-600" }
 ];
 

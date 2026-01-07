@@ -2,7 +2,7 @@
 import { computed } from 'vue';
 import { useGameStore } from '@/ui/stores/gameStore';
 import GameLayout from '../layouts/GameLayout.vue';
-import { CHAMPIONS_DB } from '@/core/domain/Champions'; // <--- IMPORTANTE: Importar a DB
+import { CHAMPIONS_DB } from '@/core/domain/Champions';
 
 const store = useGameStore();
 

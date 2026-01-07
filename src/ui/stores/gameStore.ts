@@ -131,20 +131,23 @@ export const useGameStore = defineStore("game", () => {
             if (result.winner === 'BLUE') { homeTeam.stats.wins++; awayTeam.stats.losses++; } 
             else { homeTeam.stats.losses++; awayTeam.stats.wins++; }
         }
-        result.playerStats.forEach((stats, playerId) => {
-            const player = players.value.find(p => p.id === playerId);
+
+        result.playerStats.forEach((stats) => {
+            const player = players.value.find(p => p.id === stats.playerId); 
+            
             if (player) {
                 stats.opponentTeamId = player.team === homeId ? awayId : homeId;
+                
                 if (!player.matchHistory) player.matchHistory = [];
+                stats.matchId = result.matchId; 
                 player.matchHistory.unshift(stats);
+                
                 const champName = stats.championName;
                 const poolIndex = player.championPool.findIndex(c => c.championName === champName);
-                if (poolIndex === -1 && champName !== 'Unknown' && champName !== 'Random') {
-                    const champDb = CHAMPIONS_DB.find(c => c.name === champName);
+                if (poolIndex === -1 && champName !== 'Unknown' && champName !== 'Random' && champName !== 'Minion') {
                     let baseMastery = 10;
                     if (stats.rating >= 7.5) baseMastery += 15;
                     player.championPool.push({ championName: champName, masteryLevel: baseMastery });
-                    if (player.team === myTeamId.value) addNews(`${player.nickname} added ${champName} to their Pool!`);
                 } else if (poolIndex !== -1) {
                     const xpGain = Math.floor(stats.rating * 2);
                     player.championPool[poolIndex].masteryLevel = Math.min(100, player.championPool[poolIndex].masteryLevel + xpGain);
@@ -165,17 +168,20 @@ export const useGameStore = defineStore("game", () => {
             const roleOrder = { 'TOP': 1, 'JUNGLE': 2, 'MID': 3, 'ADC': 4, 'SUPPORT': 5 };
             myTeamSorted = players.value.filter(p => p.team === myTeamId.value).sort((a, b) => (roleOrder[a.role as keyof typeof roleOrder] || 9) - (roleOrder[b.role as keyof typeof roleOrder] || 9)).slice(0, 5);
         }
+        
         const roleOrder = { 'TOP': 1, 'JUNGLE': 2, 'MID': 3, 'ADC': 4, 'SUPPORT': 5 };
         const enemyTeamSorted = players.value.filter(p => p.team === enemyId).sort((a, b) => (roleOrder[a.role as keyof typeof roleOrder] || 9) - (roleOrder[b.role as keyof typeof roleOrder] || 9)).slice(0, 5);
 
         const draft = simulateDraft(myTeamSorted, enemyTeamSorted, draftOrders);
-        const result = simulateMatch(myTeamSorted, enemyTeamSorted, day.value, myTeamId.value, enemyId, tactics, draft);
+        const result = simulateMatch(myTeamSorted, enemyTeamSorted, day.value, myTeamId.value, enemyId, tactics, draft, match.id);
+        
         result.matchId = match.id; 
         processMatchResult(result, myTeamId.value, enemyId);
         lastMatchResult.value = result;
         archiveMatch(result);
         match.played = true;
         match.winnerId = result.winner === 'BLUE' ? match.homeTeamId : match.awayTeamId;
+        
         addNews(`Match vs ${getTeamName(enemyId)}: ${match.winnerId === myTeamId.value ? "VICTORY" : "DEFEAT"} (${result.blueScore}-${result.redScore})`);
         advanceDay();
     }
@@ -187,7 +193,20 @@ export const useGameStore = defineStore("game", () => {
 
     function advanceDay() {
         console.log(`Simulating Day ${day.value}...`);
+
+        const myMatchToday = schedule.value.find(m => m.day === day.value && (m.homeTeamId === myTeamId.value || m.awayTeamId === myTeamId.value));
+
+        if (myMatchToday && !myMatchToday.played) {
+            console.log("Waiting for player match...");
+            return; 
+        }
+
+        if (day.value > 1 && day.value % 365 === 0) {
+            resetSeason();
+        }
+
         simulateDailySoloQ(players.value);
+
         const todayMatches = schedule.value.filter(m => m.day === day.value && !m.played);
         todayMatches.forEach(match => {
             if (match.homeTeamId === myTeamId.value || match.awayTeamId === myTeamId.value) return; 
@@ -201,7 +220,6 @@ export const useGameStore = defineStore("game", () => {
             processMatchResult(result, match.homeTeamId, match.awayTeamId);
             archiveMatch(result); 
         });
-        const myMatchToday = schedule.value.find(m => m.day === day.value && (m.homeTeamId === myTeamId.value || m.awayTeamId === myTeamId.value));
         if (!myMatchToday || myMatchToday.played) day.value++;
     }
 
@@ -222,6 +240,25 @@ export const useGameStore = defineStore("game", () => {
     function releasePlayer(id: string) {
         const p = players.value.find(p => p.id === id);
         if(p) { p.team = 'Free Agent'; addNews(`Released ${p.nickname}`); }
+    }
+
+    function resetSeason() {
+        console.log("🔄 SEASON RESET! A new year begins.");
+        
+        addNews("The Ranked Season has ended! Ranks have been soft-reset.");
+
+        players.value.forEach(p => {
+            if (p.soloQ) {
+                p.soloQ.lp = Math.floor(p.soloQ.lp * 0.3);
+                p.soloQ.rankTier = 'MASTER'; 
+                
+                p.soloQ.wins = 0;
+                p.soloQ.losses = 0;
+            }
+        });
+
+        // Opcional: Você pode resetar o schedule aqui se quiser um jogo infinito
+        // Mas por enquanto vamos focar no reset da SoloQ
     }
 
     function playScrim() { console.log("Scrim not implemented yet"); }
