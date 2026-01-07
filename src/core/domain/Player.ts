@@ -1,46 +1,68 @@
-import type { MatchStats, ChampionStats } from './Stats';
-
 export type Role = 'TOP' | 'JUNGLE' | 'MID' | 'ADC' | 'SUPPORT';
 
 export interface PlayerAttributes {
-    laning:  number;
+    laning: number;
     farming: number;
     roaming: number;
-    mechanics:  number;
-    reflexes:   number;
+    mechanics: number;
+    reflexes: number;
     aggression: number;
-    macro:       number;
-    vision:      number;
+    macro: number;
+    vision: number;
     shotcalling: number;
-    teamfight:   number;
+    teamfight: number;
 }
 
 export interface ChampionMastery {
     championName: string;
-    masteryLevel: number;
+    masteryLevel: number; 
+}
+
+export interface SoloQStats {
+    rankTier: 'CHALLENGER' | 'GRANDMASTER' | 'MASTER';
+    lp: number;
+    wins: number;
+    losses: number;
+}
+
+export interface PlayerContract {
+    salary: number;  
+    expires: number; 
+}
+
+export interface MatchHistoryEntry {
+    matchId: string;
+    day: number;
+    opponentTeamId: string;
+    result: 'WIN' | 'LOSS';
+    championName: string;
+    kills: number;
+    deaths: number;
+    assists: number;
+    cs: number;
+    gold: number;
+    damage: number;
+    duration: number;
+    visionScore: number;
+    rating: number;
 }
 
 export interface Player {
-    id:       string;
-    name:     string;
+    id: string;
+    name: string;
     nickname: string;
-    age:      number;
-    gender:   string;
-    role:     Role;
-    team:     string;
-    country:  string;
-
-    overall:   number;
+    age: number;
+    country: string;
+    role: Role;
+    team: string; 
+    gender: 'MALE' | 'FEMALE';
+    
+    overall: number;
     potential: number;
-
-    contract: {
-        salary:  number;
-        expires: number;
-    };
-
-    attributes:   PlayerAttributes;
+    
+    attributes: PlayerAttributes;
     championPool: ChampionMastery[];
-
-    matchHistory: MatchStats[];      
-    championStats: ChampionStats[];
+    contract: PlayerContract;
+    matchHistory: MatchHistoryEntry[];
+    soloQ?: SoloQStats;
 }

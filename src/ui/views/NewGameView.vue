@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue';
+import { ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { useGameStore } from '@/ui/stores/gameStore';
 import { generateLeagueTeams } from '@/core/generators/teamGenerator';

@@ -11,6 +11,7 @@ import MatchLobbyView from "@/ui/views/MatchLobbyView.vue";
 import ScheduleView from "@/ui/views/ScheduleView.vue";
 import LeagueStatsView from "@/ui/views/LeagueStatsView.vue";
 import NewGameView from "@/ui/views/NewGameView.vue"; 
+import SoloQView from "@/ui/views/SoloQView.vue";
 
 const router = createRouter({
     history: createWebHistory(import.meta.env.BASE_URL),
@@ -18,6 +19,7 @@ const router = createRouter({
         { path: '/', name: 'dashboard', component: DashboardView },
         { path: '/new-game', name: 'new-game', component: NewGameView }, 
         { path: '/my-team', name: 'my-team', component: MyTeamView },
+        { path: '/soloq', name: 'soloq', component: SoloQView },
         { path: '/market', name: 'market', component: MarketView },
         { path: '/player/:id', name: 'player', component: PlayerView },
         { path: '/standings', name: 'standings', component: StandingsView },
@@ -29,7 +31,7 @@ const router = createRouter({
     ]
 });
 
-router.beforeEach((to, from, next) => {
+router.beforeEach((to, _from, next) => {
     const store = useGameStore();
     if (to.name !== 'new-game' && !store.isGameStarted) {
         const save = localStorage.getItem('summoners-manager-save');

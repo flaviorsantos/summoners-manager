@@ -30,6 +30,9 @@
                 <router-link to="/my-team" class="nav-item">
                     <span class="icon">🛡️</span> <span class="label">My Team</span>
                 </router-link>
+                <router-link to="/soloq" class="nav-item">
+                    <span class="icon">🔥</span> <span class="label">Solo Queue</span> 
+                </router-link>
                 <router-link to="/market" class="nav-item">
                     <span class="icon">⚖️</span> <span class="label">Market</span>
                 </router-link>

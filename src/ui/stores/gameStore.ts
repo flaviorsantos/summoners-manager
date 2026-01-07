@@ -11,11 +11,12 @@ import type { GameTactics } from "@/core/domain/Tactics";
 import { simulateDraft, type DraftOrders } from "@/core/simulation/DraftEngine";
 import { CHAMPIONS_DB } from "@/core/domain/Champions";
 import { REAL_PLAYERS_2026 } from "@/core/data/RealPlayers2026";
-import type { Manager } from "@/core/domain/Manager"; // <--- NOVO
+import type { Manager } from "@/core/domain/Manager"; 
 import { v4 as uuidv4 } from 'uuid';
+import { initializeSoloQ, simulateDailySoloQ } from "@/core/simulation/SoloQEngine";
 
 export const useGameStore = defineStore("game", () => {
-    const manager = ref<Manager | null>(null); // <--- NOVO
+    const manager = ref<Manager | null>(null); 
     const players = ref<Player[]>([]);
     const teams = ref<Team[]>([]);
     const day = ref(1);
@@ -56,9 +57,10 @@ export const useGameStore = defineStore("game", () => {
         }
 
         return {
-            id: uuidv4(),
+           id: uuidv4(),
             name: realData.name,
             nickname: realData.nickname,
+            gender: 'MALE', 
             role: realData.role,
             age: realData.age,
             country: realData.country,
@@ -67,10 +69,8 @@ export const useGameStore = defineStore("game", () => {
             potential: realData.potential,
             attributes,
             championPool,
-            contract: { salary: Math.floor(realData.overall * 15000), expires: 1 }, 
-            gender: 'Male', 
+            contract: { salary: Math.floor(realData.overall * 15000), expires: 1 },
             matchHistory: [],
-            championStats: []
         };
     }
 
@@ -112,6 +112,8 @@ export const useGameStore = defineStore("game", () => {
         while(players.value.filter(p => p.team === 'Free Agent').length < 30) {
              players.value.push(generatePlayer());
         }
+
+        players.value.forEach(p => initializeSoloQ(p));
 
         schedule.value = generateSchedule(teams.value);
         day.value = 1;
@@ -185,6 +187,7 @@ export const useGameStore = defineStore("game", () => {
 
     function advanceDay() {
         console.log(`Simulating Day ${day.value}...`);
+        simulateDailySoloQ(players.value);
         const todayMatches = schedule.value.filter(m => m.day === day.value && !m.played);
         todayMatches.forEach(match => {
             if (match.homeTeamId === myTeamId.value || match.awayTeamId === myTeamId.value) return; 

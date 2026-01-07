@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted } from 'vue';
+import { computed } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useGameStore } from '@/ui/stores/gameStore';
 import GameLayout from '../layouts/GameLayout.vue';
@@ -20,11 +20,6 @@ const roster = computed(() => {
     return store.players
         .filter(p => p.team === team.value?.id)
         .sort((a, b) => (roleOrder[a.role] || 9) - (roleOrder[b.role] || 9));
-});
-
-onMounted(() => {
-    if (store.teams.length === 0) store.initializeNewGame();
-    if (!team.value) router.push('/'); 
 });
 
 const openPlayer = (id: string) => router.push({ name: 'player', params: { id } });
@@ -99,7 +94,7 @@ const openPlayer = (id: string) => router.push({ name: 'player', params: { id } 
                                 <span :class="getRatingColorClass(player.overall)">{{ player.overall }}</span>
                             </td>
                             
-                            <td class="p-3 text-center font-bold text-gray-500">
+                            <td class="p-3 text-center font-bold text-lg">
                                 <span :class="getRatingColorClass(player.potential)">{{ player.potential }}</span>
                             </td>
 
