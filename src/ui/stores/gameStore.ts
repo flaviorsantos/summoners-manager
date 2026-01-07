@@ -182,7 +182,7 @@ export const useGameStore = defineStore("game", () => {
         match.played = true;
         match.winnerId = result.winner === 'BLUE' ? match.homeTeamId : match.awayTeamId;
         
-        addNews(`Match vs ${getTeamName(enemyId)}: ${match.winnerId === myTeamId.value ? "VICTORY" : "DEFEAT"} (${result.blueScore}-${result.redScore})`);
+        addNews(`Match vs ${getTeamName(enemyId)}: ${match.winnerId === myTeamId.value ? "DEFEAT" : "VICTORY"} (${result.blueScore}-${result.redScore})`);
         advanceDay();
     }
 

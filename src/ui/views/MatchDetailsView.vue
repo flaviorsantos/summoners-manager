@@ -31,7 +31,7 @@ const redTeamColor = computed(() => {
 const getChampImage = (champName: string) => {
     const champ = CHAMPIONS_DB.find(c => c.name === champName);
     const validId = champ ? champ.id : champName.replace(/[^a-zA-Z0-9]/g, '');
-    return `https://ddragon.leagueoflegends.com/cdn/14.1.1/img/champion/${validId}.png`;
+    return `https://ddragon.leagueoflegends.com/cdn/15.24.1/img/champion/${validId}.png`;
 };
 
 // 👇 CORREÇÃO AQUI

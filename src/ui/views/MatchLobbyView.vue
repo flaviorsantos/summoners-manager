@@ -17,6 +17,7 @@ const MY_SIDE = 'BLUE';
 
 const lobbyPhase = ref<'ROSTER' | 'DRAFT' | 'PREP'>('ROSTER');
 const selectedLineup = ref<Map<string, string>>(new Map()); 
+const selectedRoleFilter = ref<string | null>(null);
 
 type DraftStep = { side: 'BLUE' | 'RED', type: 'BAN' | 'PICK', slotIdx: number };
 const DRAFT_SEQUENCE: DraftStep[] = [
@@ -51,7 +52,6 @@ const swapSourceSlot = ref<number | null>(null);
 const match = computed(() => store.nextMatch);
 const enemyTeam = computed(() => store.teams.find(t => t.id === (match.value?.homeTeamId === store.myTeamId ? match.value?.awayTeamId : match.value?.homeTeamId)));
 
-// IMPORTANTE: Ordem fixa para garantir consistência (Top, Jg, Mid, Adc, Sup)
 const enemyRoster = computed(() => {
     if (!enemyTeam.value) return [];
     const roster: Player[] = [];
@@ -63,7 +63,7 @@ const enemyRoster = computed(() => {
     return roster;
 });
 
-onBeforeRouteLeave((to, from, next) => {
+onBeforeRouteLeave((_to, _from, next) => {
     if (lobbyPhase.value === 'DRAFT' || lobbyPhase.value === 'PREP') {
         if (confirm("If you leave now, you will dodge the match. Are you sure?")) next();
         else next(false);
@@ -106,6 +106,11 @@ const takenChamps = computed(() => new Set([
 
 const filteredChampions = computed(() => {
     let list = CHAMPIONS_DB.filter(c => c.name.toLowerCase().includes(searchQuery.value.toLowerCase()));
+
+    if (selectedRoleFilter.value) {
+        list = list.filter(c => c.roles.includes(selectedRoleFilter.value as any));
+    }
+
     list = list.filter(c => !takenChamps.value.has(c.id));
     return list.sort((a, b) => a.name.localeCompare(b.name));
 });
@@ -139,44 +144,48 @@ const startTimer = () => {
     }, 1000);
 };
 
-// --- FUNÇÕES DE LÓGICA DE JOGO ---
-
-// 1. REORDENAÇÃO (SWAP) - Definida antes para ser usada no advanceTurn
 const reorderEnemyComp = (picksMap: Map<number, string>, roster: Player[]): Map<number, string> => {
+    const availableChampIds = Array.from(picksMap.values());
+    const slots = [0, 1, 2, 3, 4]; 
+    
+    let bestAssignment: string[] = [];
+    let bestScore = -Infinity;
+
+    const permute = (currentAssign: string[], remainingChamps: string[]) => {
+        if (currentAssign.length === 5) {
+            let score = 0;
+            currentAssign.forEach((cId, idx) => {
+                const player = roster[idx];
+                const champ = CHAMPIONS_DB.find(c => c.id === cId);
+                if (champ && player) {
+                    if (champ.roles[0] === player.role) score += 100; 
+                    else if (champ.roles.includes(player.role as any)) score += 50;
+                    else score -= 1000; 
+                }
+            });
+
+            if (score > bestScore) {
+                bestScore = score;
+                bestAssignment = [...currentAssign];
+            }
+            return;
+        }
+
+        for (let i = 0; i < remainingChamps.length; i++) {
+            const next = remainingChamps[i];
+            const remaining = remainingChamps.filter((_, idx) => idx !== i);
+            permute([...currentAssign, next], remaining);
+        }
+    };
+
+    permute([], availableChampIds);
+
     const finalPicks = new Map<number, string>();
-    const availableChamps = Array.from(picksMap.values());
-    const assignedChamps = new Set<string>();
-
-    // Passo 1: Match Perfeito (Role Principal)
-    roster.forEach((player, rosterIdx) => {
-        const perfectMatch = availableChamps.find(cId => {
-            if (assignedChamps.has(cId)) return false;
-            const c = CHAMPIONS_DB.find(db => db.id === cId);
-            return c && c.roles.includes(player.role as any);
-        });
-
-        if (perfectMatch) {
-            finalPicks.set(rosterIdx, perfectMatch);
-            assignedChamps.add(perfectMatch);
-        }
-    });
-
-    // Passo 2: Match Secundário (Off-role ou Flex)
-    roster.forEach((player, rosterIdx) => {
-        if (finalPicks.has(rosterIdx)) return;
-
-        // Pega qualquer um que sobrou
-        const leftover = availableChamps.find(cId => !assignedChamps.has(cId));
-        if (leftover) {
-            finalPicks.set(rosterIdx, leftover);
-            assignedChamps.add(leftover);
-        }
-    });
-
+    bestAssignment.forEach((cId, idx) => finalPicks.set(idx, cId));
+    
     return finalPicks;
 };
 
-// 2. TIMEOUT / AUTO PICK
 const handleTimeout = () => {
     if (lobbyPhase.value !== 'DRAFT') return;
     
@@ -242,54 +251,115 @@ const advanceTurn = () => {
 
 // 3. IA TURNO
 const triggerAiTurn = () => {
+    // Validação básica: Só roda se for Draft e turno do inimigo
     if (lobbyPhase.value !== 'DRAFT' || isMyTurn.value) return;
     
     const step = currentStep.value;
-    let choiceId = '';
 
+    // --- FASE DE BANIMENTO ---
     if (step.type === 'BAN') {
+        // Mapeia os picks do jogador (Blue Team) para a IA analisar
         const enemyPicksMap = new Map<string, string>();
         bluePicks.value.forEach((champId, slot) => enemyPicksMap.set(String(slot), champId));
-        choiceId = getSmartBan(activeRoster.value, takenChamps.value, enemyPicksMap);
         
-        if (choiceId) redBans.value[step.slotIdx] = choiceId;
-        else {
+        // Chama a IA de Ban (Atualizada para não banir role já preenchida)
+        const choiceId = getSmartBan(activeRoster.value, takenChamps.value, enemyPicksMap);
+        
+        if (choiceId) {
+            redBans.value[step.slotIdx] = choiceId;
+        } else {
+            // Fallback: Bane o primeiro disponível da lista se a IA falhar
             const rnd = filteredChampions.value[0];
             if (rnd) redBans.value[step.slotIdx] = rnd.id;
         }
         advanceTurn();
-    } else {
+    } 
+    
+    // --- FASE DE PICK ---
+    else {
         const currentRedPicks = Array.from(redPicks.value.values());
-        const satisfiedPlayerIndices = new Set<number>();
         
-        currentRedPicks.forEach(champId => {
+        // 1. SIMULAÇÃO DE ALOCAÇÃO (O "Cérebro" da Correção)
+        // Antes de escolher, a IA usa o Reorder para ver quem está jogando onde com os picks atuais.
+        // Isso impede que ela pense "Ninguém pegou Top ainda" só porque o slot 0 está vazio,
+        // sendo que ela já pegou um Top Laner no slot 3, por exemplo.
+        
+        const tempMap = new Map<number, string>();
+        currentRedPicks.forEach((id, idx) => tempMap.set(idx, id)); 
+        
+        // Usa o Solver para organizar o time atual da melhor forma possível
+        const organizedPicks = reorderEnemyComp(tempMap, enemyRoster.value);
+        
+        const filledRoles = new Set<string>();
+        const satisfiedPlayerIndices = new Set<number>();
+
+        // Marca quais roles já estão cobertas na configuração ideal
+        organizedPicks.forEach((champId, rosterIdx) => {
             const champ = CHAMPIONS_DB.find(c => c.id === champId);
-            if (!champ) return;
-            let bestOwnerIdx = -1;
-            enemyRoster.value.forEach((player, idx) => {
-                if (satisfiedPlayerIndices.has(idx)) return;
-                if (champ.roles.includes(player.role as any)) { bestOwnerIdx = idx; }
-            });
-            if (bestOwnerIdx === -1) {
-                enemyRoster.value.forEach((player, idx) => { if (!satisfiedPlayerIndices.has(idx)) bestOwnerIdx = idx; });
+            if (champ) {
+                filledRoles.add(champ.roles[0]); // Considera a role primária preenchida
+                satisfiedPlayerIndices.add(rosterIdx); // Esse jogador já tem boneco
             }
-            if (bestOwnerIdx !== -1) satisfiedPlayerIndices.add(bestOwnerIdx);
         });
 
-        let bestMove = { slotIdx: step.slotIdx, champId: '', score: -1 };
+        // 2. BUSCA O MELHOR PICK PARA QUEM FALTA
+        let bestMove = { slotIdx: step.slotIdx, champId: '', score: -Infinity };
+
         enemyRoster.value.forEach((player, rosterIdx) => {
+            // Se esse jogador já tem um pick atribuído na simulação, ignoramos ele
             if (satisfiedPlayerIndices.has(rosterIdx)) return;
+
+            // Define o que o time PRECISA
+            const missingRoles = ['TOP', 'JUNGLE', 'MID', 'ADC', 'SUPPORT'].filter(r => !filledRoles.has(r));
+
+            // Pergunta para a IA: Qual o melhor champ para este jogador específico?
             const result = getSmartPick(player, takenChamps.value, currentRedPicks);
-            if (result.score > bestMove.score) {
-                bestMove = { slotIdx: rosterIdx, champId: result.id, score: result.score };
+            let modifiedScore = result.score;
+            
+            const pickChamp = CHAMPIONS_DB.find(c => c.id === result.id);
+
+            if (pickChamp) {
+                // --- REGRAS DE OURO DA COMPOSIÇÃO ---
+
+                // A. REGRA ANTI-DUPLICATA: Se a role principal já existe, penaliza muito (-500)
+                // Isso evita 2 ADCs ou 2 Junglers.
+                if (filledRoles.has(pickChamp.roles[0])) {
+                    modifiedScore -= 500;
+                }
+
+                // B. REGRA DE NECESSIDADE: Se o jogador é da role que falta, e o boneco é dessa role -> Bônus (+200)
+                if (player.role === pickChamp.roles[0] && missingRoles.includes(player.role)) {
+                    modifiedScore += 200;
+                }
+
+                // C. REGRA DE OFF-ROLE: Se o boneco nem sequer serve para as roles que faltam -> Penaliza (-100)
+                const champCanFillMissing = pickChamp.roles.some(r => missingRoles.includes(r));
+                if (!champCanFillMissing) {
+                    modifiedScore -= 100;
+                }
+            }
+
+            // Guarda o melhor movimento encontrado entre todos os jogadores pendentes
+            if (modifiedScore > bestMove.score) {
+                bestMove = { slotIdx: rosterIdx, champId: result.id, score: modifiedScore };
             }
         });
 
+        // 3. APLICA O PICK
         if (bestMove.champId) {
             redPicks.value.set(step.slotIdx, bestMove.champId);
         } else {
-            const rnd = filteredChampions.value[0];
-            if (rnd) redPicks.value.set(step.slotIdx, rnd.id);
+            // Fallback de Emergência: Pega qualquer boneco que sirva numa role faltante
+            const missing = ['TOP', 'JUNGLE', 'MID', 'ADC', 'SUPPORT'].filter(r => !filledRoles.has(r));
+            const emergencyChamp = filteredChampions.value.find(c => missing.includes(c.roles[0]));
+            
+            if (emergencyChamp) {
+                redPicks.value.set(step.slotIdx, emergencyChamp.id);
+            } else {
+                // Último caso: Aleatório (não deve acontecer com a DB cheia)
+                const rnd = filteredChampions.value[0];
+                if (rnd) redPicks.value.set(step.slotIdx, rnd.id);
+            }
         }
         advanceTurn();
     }
@@ -344,6 +414,11 @@ const getSlotClass = (side: string, type: string, idx: number) => {
     const isActive = lobbyPhase.value === 'DRAFT' && currentStep.value.side === side && currentStep.value.type === type && currentStep.value.slotIdx === idx;
     if (isActive) return 'ring-2 ring-yellow-400 animate-pulse bg-gray-700';
     return 'bg-gray-800 opacity-60';
+};
+
+const setRoleFilter = (role: string | null) => {
+    if (selectedRoleFilter.value === role) selectedRoleFilter.value = null; // Toggle off
+    else selectedRoleFilter.value = role;
 };
 </script>
 
@@ -420,9 +495,23 @@ const getSlotClass = (side: string, type: string, idx: number) => {
             </div>
             <div class="col-span-6 bg-gray-800 rounded-lg border border-gray-700 flex flex-col overflow-hidden relative">
                 <div v-if="lobbyPhase === 'DRAFT'" class="flex flex-col h-full">
-                    <div class="p-3 bg-gray-900 border-b border-gray-700 flex gap-4">
-                        <input v-model="searchQuery" type="text" placeholder="Search..." class="bg-gray-800 text-white px-3 py-2 rounded border border-gray-600 w-full focus:border-blue-500 outline-none" :disabled="!isMyTurn">
-                        <button @click="confirmSelection" :disabled="!isMyTurn || !hoveredChampId" class="px-6 py-2 font-bold rounded uppercase transition-all" :class="isMyTurn && hoveredChampId ? 'bg-blue-600 text-white hover:bg-blue-500' : 'bg-gray-700 text-gray-500 cursor-not-allowed'">LOCK IN</button>
+                    <div class="p-3 bg-gray-900 border-b border-gray-700 flex flex-col gap-2">
+                        <div class="flex justify-between gap-1">
+                            <button v-for="role in ['TOP', 'JUNGLE', 'MID', 'ADC', 'SUPPORT']" 
+                                    :key="role"
+                                    @click="setRoleFilter(role)"
+                                    class="flex-1 py-1 text-[10px] font-bold uppercase rounded border transition-all"
+                                    :class="selectedRoleFilter === role ? 'bg-blue-600 text-white border-blue-400' : 'bg-gray-800 text-gray-500 border-gray-700 hover:bg-gray-700'"
+                            >
+                                {{ role }}
+                            </button>
+                            <button @click="setRoleFilter(null)" class="px-2 py-1 text-[10px] font-bold uppercase rounded border bg-gray-800 text-gray-400 border-gray-700 hover:text-white" title="Clear Filter">X</button>
+                        </div>
+
+                        <div class="flex gap-4">
+                            <input v-model="searchQuery" type="text" placeholder="Search..." class="bg-gray-800 text-white px-3 py-2 rounded border border-gray-600 w-full focus:border-blue-500 outline-none" :disabled="!isMyTurn">
+                            <button @click="confirmSelection" :disabled="!isMyTurn || !hoveredChampId" class="px-6 py-2 font-bold rounded uppercase transition-all" :class="isMyTurn && hoveredChampId ? 'bg-blue-600 text-white hover:bg-blue-500' : 'bg-gray-700 text-gray-500 cursor-not-allowed'">LOCK IN</button>
+                        </div>
                     </div>
                     <div class="flex-1 overflow-y-auto p-4">
                         <div class="grid grid-cols-10 gap-2">

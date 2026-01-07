@@ -33,42 +33,82 @@ const SYNERGY_MAP: Record<string, string[]> = {
     'Wukong': ['Yasuo', 'Orianna'],
 };
 
-export function getSmartBan(targetTeam: Player[], currentBans: Set<string>, enemyPicks?: Map<string, string>): string {
-    // 1. Quebrar Combo (Se inimigo pegou Xayah, bane Rakan)
+export function getSmartBan(
+    targetTeam: Player[], 
+    currentBans: Set<string>, 
+    enemyPicks?: Map<string, string> // ID -> ChampID
+): string {
+    
+    // 1. Verificar quais Roles o inimigo JÁ PREENCHEU
+    const enemyFilledRoles = new Set<string>();
+    
+    if (enemyPicks) {
+        enemyPicks.forEach((champId) => {
+            const c = CHAMPIONS_DB.find(x => x.id === champId);
+            if (c) {
+                // Assume que a role primária do campeão é a que ele vai jogar
+                // Isso previne banir ADC se o cara já pegou Kalista
+                enemyFilledRoles.add(c.roles[0]); 
+            }
+        });
+    }
+
+    // 2. Quebrar Combo (Mantido)
     if (enemyPicks && enemyPicks.size > 0 && Math.random() > 0.6) {
         for (const [_, champId] of enemyPicks) {
             const champName = CHAMPIONS_DB.find(c => c.id === champId)?.name;
             if (champName && SYNERGY_MAP[champName]) {
                 for (const partner of SYNERGY_MAP[champName]) {
                     const partnerChamp = CHAMPIONS_DB.find(c => c.name === partner);
-                    if (partnerChamp && !currentBans.has(partnerChamp.id)) return partnerChamp.id;
+                    // Só bane se a role do parceiro ainda estiver ABERTA
+                    if (partnerChamp && !currentBans.has(partnerChamp.id)) {
+                         if (!enemyFilledRoles.has(partnerChamp.roles[0])) {
+                             return partnerChamp.id;
+                         }
+                    }
                 }
             }
         }
     }
 
-    // 2. Target Ban (Focar Mono Champions ou Carry)
-    if (Math.random() > 0.3) {
-        let candidates: { id: string, score: number }[] = [];
-        targetTeam.forEach(p => {
-            const threat = p.overall / 100;
-            p.championPool.forEach(pool => {
-                const c = CHAMPIONS_DB.find(db => db.name === pool.championName);
-                if (c && !currentBans.has(c.id)) {
-                    candidates.push({ id: c.id, score: pool.masteryLevel * threat });
-                }
-            });
-        });
-        candidates.sort((a, b) => b.score - a.score);
-        if (candidates.length > 0) return candidates[0].id;
-    }
+    // 3. Target Ban Inteligente
+    let candidates: { id: string, score: number }[] = [];
+    
+    targetTeam.forEach(p => {
+        // Se a role desse jogador já foi preenchida no time inimigo, IGNORA o ban nele
+        if (enemyFilledRoles.has(p.role)) return;
 
-    // 3. Meta Ban
+        const threat = p.overall / 100;
+        p.championPool.forEach(pool => {
+            const c = CHAMPIONS_DB.find(db => db.name === pool.championName);
+            if (c && !currentBans.has(c.id)) {
+                // Se o campeão for de uma role já preenchida, penaliza muito o score
+                // Ex: Inimigo já tem Kalista (ADC), mas tem Vayne na pool. Score cai.
+                let situationalScore = pool.masteryLevel * threat;
+                
+                // Verificação extra de segurança
+                if (c.roles.some(r => enemyFilledRoles.has(r))) {
+                    situationalScore *= 0.1; 
+                }
+
+                candidates.push({ id: c.id, score: situationalScore });
+            }
+        });
+    });
+
+    candidates.sort((a, b) => b.score - a.score);
+    if (candidates.length > 0) return candidates[0].id;
+
+    // 4. Meta Ban (Só bane champs cujas roles estão abertas)
     for (const name of META_BANS) {
         const c = CHAMPIONS_DB.find(db => db.name === name);
-        if (c && !currentBans.has(c.id)) return c.id;
+        if (c && !currentBans.has(c.id)) {
+             // Se a role principal do meta ban não foi preenchida, bane
+             if (!enemyFilledRoles.has(c.roles[0])) return c.id;
+        }
     }
 
+    // Fallback: Pega qualquer um válido
     const fallback = CHAMPIONS_DB.find(c => !currentBans.has(c.id));
     return fallback ? fallback.id : 'Garen';
 }

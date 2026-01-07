@@ -30,11 +30,7 @@ const getMasteryText = (level: number) => {
     return { label: 'Novice', color: 'text-red-500' };
 };
 
-const getChampImage = (champName: string) => {
-    const champ = CHAMPIONS_DB.find(c => c.name === champName);
-    const id = champ ? champ.id : champName.replace(/[^a-zA-Z0-9]/g, ''); 
-    return `https://ddragon.leagueoflegends.com/cdn/15.24.1/img/champion/${id}.png`;
-};
+const getChampImage = (champId: string) => `https://ddragon.leagueoflegends.com/cdn/15.24.1/img/champion/${champId}.png`;
 
 const getKda = (k: number, d: number, a: number) => {
     return ((k + a) / Math.max(1, d)).toFixed(2);
