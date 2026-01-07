@@ -139,6 +139,44 @@ const startTimer = () => {
     }, 1000);
 };
 
+// --- FUNÇÕES DE LÓGICA DE JOGO ---
+
+// 1. REORDENAÇÃO (SWAP) - Definida antes para ser usada no advanceTurn
+const reorderEnemyComp = (picksMap: Map<number, string>, roster: Player[]): Map<number, string> => {
+    const finalPicks = new Map<number, string>();
+    const availableChamps = Array.from(picksMap.values());
+    const assignedChamps = new Set<string>();
+
+    // Passo 1: Match Perfeito (Role Principal)
+    roster.forEach((player, rosterIdx) => {
+        const perfectMatch = availableChamps.find(cId => {
+            if (assignedChamps.has(cId)) return false;
+            const c = CHAMPIONS_DB.find(db => db.id === cId);
+            return c && c.roles.includes(player.role as any);
+        });
+
+        if (perfectMatch) {
+            finalPicks.set(rosterIdx, perfectMatch);
+            assignedChamps.add(perfectMatch);
+        }
+    });
+
+    // Passo 2: Match Secundário (Off-role ou Flex)
+    roster.forEach((player, rosterIdx) => {
+        if (finalPicks.has(rosterIdx)) return;
+
+        // Pega qualquer um que sobrou
+        const leftover = availableChamps.find(cId => !assignedChamps.has(cId));
+        if (leftover) {
+            finalPicks.set(rosterIdx, leftover);
+            assignedChamps.add(leftover);
+        }
+    });
+
+    return finalPicks;
+};
+
+// 2. TIMEOUT / AUTO PICK
 const handleTimeout = () => {
     if (lobbyPhase.value !== 'DRAFT') return;
     
@@ -146,7 +184,6 @@ const handleTimeout = () => {
         if (hoveredChampId.value) {
             confirmSelection();
         } else {
-            // Auto Pick Seguro
             const player = activeRoster.value[currentStep.value.slotIdx];
             const myPicksArr = Array.from(bluePicks.value.values());
             
@@ -192,12 +229,18 @@ const advanceTurn = () => {
             setTimeout(triggerAiTurn, thinkTime);
         }
     } else {
+        // DRAFT ACABOU - ENTRANDO EM PREP
         clearInterval(timerInterval);
+        
+        // 👇 AQUI ACONTECE A MÁGICA VISUAL
+        // O Draft termina e a IA instantaneamente organiza os picks para a role certa.
+        redPicks.value = reorderEnemyComp(redPicks.value, enemyRoster.value);
+        
         lobbyPhase.value = 'PREP';
     }
 };
 
-// --- NOVA LÓGICA DE IA (CORRIGIDA) ---
+// 3. IA TURNO
 const triggerAiTurn = () => {
     if (lobbyPhase.value !== 'DRAFT' || isMyTurn.value) return;
     
@@ -216,53 +259,27 @@ const triggerAiTurn = () => {
         }
         advanceTurn();
     } else {
-        // PICK PHASE INTELIGENTE
         const currentRedPicks = Array.from(redPicks.value.values());
-        
-        // 1. Identificar quem JÁ ESTÁ ATENDIDO.
-        // Se já pickamos Syndra, e Syndra é Mid, o Mid Laner (Slot 2) já está feliz.
         const satisfiedPlayerIndices = new Set<number>();
         
         currentRedPicks.forEach(champId => {
             const champ = CHAMPIONS_DB.find(c => c.id === champId);
             if (!champ) return;
-
-            // Procura o melhor dono para esse champ entre os jogadores do roster
-            // Prioridade: Main Role > Off Role
             let bestOwnerIdx = -1;
-            
-            // Tenta achar alguém da Main Role que ainda não foi marcado
             enemyRoster.value.forEach((player, idx) => {
                 if (satisfiedPlayerIndices.has(idx)) return;
-                if (champ.roles.includes(player.role as any)) {
-                    bestOwnerIdx = idx;
-                }
+                if (champ.roles.includes(player.role as any)) { bestOwnerIdx = idx; }
             });
-
-            // Se não achou Main Role, pega o primeiro livre (Fallback)
             if (bestOwnerIdx === -1) {
-                enemyRoster.value.forEach((player, idx) => {
-                    if (!satisfiedPlayerIndices.has(idx)) bestOwnerIdx = idx;
-                });
+                enemyRoster.value.forEach((player, idx) => { if (!satisfiedPlayerIndices.has(idx)) bestOwnerIdx = idx; });
             }
-
             if (bestOwnerIdx !== -1) satisfiedPlayerIndices.add(bestOwnerIdx);
         });
 
-        // 2. Agora procuramos o melhor pick APENAS para quem SOBROU
         let bestMove = { slotIdx: step.slotIdx, champId: '', score: -1 };
-
-        // Slots visuais abertos para pick (para saber quem pode pickar visualmente)
-        // Na verdade, a IA pode usar o slot atual para pegar pra QUALQUER um que faltou.
-        
         enemyRoster.value.forEach((player, rosterIdx) => {
-            // Se esse jogador já tem boneco, PULA ELE! (Evita 2 Mids)
             if (satisfiedPlayerIndices.has(rosterIdx)) return;
-
-            // Calcula o pick ideal para este jogador
             const result = getSmartPick(player, takenChamps.value, currentRedPicks);
-            
-            // Prioriza Picks com maior score (Ex: Se o ADC tem pick OP, pega agora)
             if (result.score > bestMove.score) {
                 bestMove = { slotIdx: rosterIdx, champId: result.id, score: result.score };
             }
@@ -276,42 +293,6 @@ const triggerAiTurn = () => {
         }
         advanceTurn();
     }
-};
-
-// --- REORDENAÇÃO ROBUSTA (EVITA SYNDRA TOP) ---
-const reorderEnemyComp = (picksMap: Map<number, string>, roster: Player[]): Map<number, string> => {
-    const finalPicks = new Map<number, string>();
-    const availableChamps = Array.from(picksMap.values());
-    const assignedChamps = new Set<string>();
-
-    // Passo 1: Match Perfeito (Role Principal)
-    // Itera sobre os jogadores e tenta dar a eles um champ da Main Role deles
-    roster.forEach((player, rosterIdx) => {
-        const perfectMatch = availableChamps.find(cId => {
-            if (assignedChamps.has(cId)) return false;
-            const c = CHAMPIONS_DB.find(db => db.id === cId);
-            return c && c.roles.includes(player.role as any);
-        });
-
-        if (perfectMatch) {
-            finalPicks.set(rosterIdx, perfectMatch);
-            assignedChamps.add(perfectMatch);
-        }
-    });
-
-    // Passo 2: Match Secundário (Tenta encaixar o que sobrou)
-    roster.forEach((player, rosterIdx) => {
-        if (finalPicks.has(rosterIdx)) return; // Já tem
-
-        // Pega qualquer um que sobrou
-        const leftover = availableChamps.find(cId => !assignedChamps.has(cId));
-        if (leftover) {
-            finalPicks.set(rosterIdx, leftover);
-            assignedChamps.add(leftover);
-        }
-    });
-
-    return finalPicks;
 };
 
 const handleSlotClick = (slotIdx: number) => {
@@ -337,29 +318,13 @@ const handleStartMatch = () => {
         if (champId) finalPicks.set(player.id, champId);
     });
 
-    // Aplica a reordenação inteligente antes de enviar
-    const organizedRedPicks = reorderEnemyComp(redPicks.value, enemyRoster.value);
-
-    // Converte Map<Index, Champ> para Map<PlayerID, Champ>
-    const enemyPicksById = new Map<string, string>();
-    organizedRedPicks.forEach((champId, idx) => {
-        if (enemyRoster.value[idx]) {
-            enemyPicksById.set(enemyRoster.value[idx].id, champId);
-        }
-    });
-
-    // Passamos o enemyPicksById como enemyPicks para a store
-    // Nota: A store espera Map<string, string> (ID->ID) ou Map<number, string> dependendo da versão
-    // O simulateDraft aceita Map<number, string> no enemyPicks do DraftOrders?
-    // Verificando DraftEngine.ts: enemyPicks?: Map<number, string>; // SlotIdx -> ChampID
-    // Então passamos o organizedRedPicks direto.
-
+    // Como já organizamos no 'advanceTurn' (Visual), apenas enviamos o estado atual.
     store.playLeagueMatch(
         { focus: selectedFocus.value, style: selectedStyle.value },
         { 
             myBans: blueBans.value.filter(b => b), 
             myPicks: finalPicks, 
-            enemyPicks: organizedRedPicks, 
+            enemyPicks: redPicks.value, // Já está organizado!
             enemyBans: redBans.value.filter(b => b) 
         },
         activeRoster.value
