@@ -146,21 +146,27 @@ const startTimer = () => {
 
 const reorderEnemyComp = (picksMap: Map<number, string>, roster: Player[]): Map<number, string> => {
     const availableChampIds = Array.from(picksMap.values());
-    const slots = [0, 1, 2, 3, 4]; 
     
+    // Se não tiver picks suficientes, retorna o mapa original
+    if (availableChampIds.length === 0) return new Map();
+
     let bestAssignment: string[] = [];
     let bestScore = -Infinity;
 
+    // Permutação recursiva
     const permute = (currentAssign: string[], remainingChamps: string[]) => {
-        if (currentAssign.length === 5) {
+        // Se já atribuímos todos os bonecos disponíveis aos primeiros N jogadores
+        if (currentAssign.length === availableChampIds.length) {
             let score = 0;
             currentAssign.forEach((cId, idx) => {
                 const player = roster[idx];
                 const champ = CHAMPIONS_DB.find(c => c.id === cId);
+                
                 if (champ && player) {
-                    if (champ.roles[0] === player.role) score += 100; 
-                    else if (champ.roles.includes(player.role as any)) score += 50;
-                    else score -= 1000; 
+                    // Pontuação baseada no encaixe Player Role vs Champion Role
+                    if (champ.roles[0] === player.role) score += 1000; // Match Perfeito (Ex: Top no Top)
+                    else if (champ.roles.includes(player.role as any)) score += 500; // Flex Match
+                    else score -= 5000; // Erro grave (Ex: Leona Mid)
                 }
             });
 
@@ -181,6 +187,8 @@ const reorderEnemyComp = (picksMap: Map<number, string>, roster: Player[]): Map<
     permute([], availableChampIds);
 
     const finalPicks = new Map<number, string>();
+    // Mapeia de volta para os slots (assumindo que roster está ordenado Top..Sup)
+    // O bestAssignment[0] é o champ que vai pro roster[0] (Top)
     bestAssignment.forEach((cId, idx) => finalPicks.set(idx, cId));
     
     return finalPicks;
@@ -251,115 +259,92 @@ const advanceTurn = () => {
 
 // 3. IA TURNO
 const triggerAiTurn = () => {
-    // Validação básica: Só roda se for Draft e turno do inimigo
     if (lobbyPhase.value !== 'DRAFT' || isMyTurn.value) return;
     
     const step = currentStep.value;
 
-    // --- FASE DE BANIMENTO ---
     if (step.type === 'BAN') {
-        // Mapeia os picks do jogador (Blue Team) para a IA analisar
         const enemyPicksMap = new Map<string, string>();
         bluePicks.value.forEach((champId, slot) => enemyPicksMap.set(String(slot), champId));
         
-        // Chama a IA de Ban (Atualizada para não banir role já preenchida)
+        // Bans agora respeitam o que já foi pickado
         const choiceId = getSmartBan(activeRoster.value, takenChamps.value, enemyPicksMap);
         
-        if (choiceId) {
-            redBans.value[step.slotIdx] = choiceId;
-        } else {
-            // Fallback: Bane o primeiro disponível da lista se a IA falhar
+        if (choiceId) redBans.value[step.slotIdx] = choiceId;
+        else {
             const rnd = filteredChampions.value[0];
             if (rnd) redBans.value[step.slotIdx] = rnd.id;
         }
         advanceTurn();
-    } 
-    
-    // --- FASE DE PICK ---
-    else {
+    } else {
+        // PICK PHASE
         const currentRedPicks = Array.from(redPicks.value.values());
-        
-        // 1. SIMULAÇÃO DE ALOCAÇÃO (O "Cérebro" da Correção)
-        // Antes de escolher, a IA usa o Reorder para ver quem está jogando onde com os picks atuais.
-        // Isso impede que ela pense "Ninguém pegou Top ainda" só porque o slot 0 está vazio,
-        // sendo que ela já pegou um Top Laner no slot 3, por exemplo.
-        
+
+        // A. SIMULAÇÃO: Onde os bonecos atuais vão cair?
+        // Rodamos o reorder AGORA para saber quais roles já estão cobertas de verdade
         const tempMap = new Map<number, string>();
-        currentRedPicks.forEach((id, idx) => tempMap.set(idx, id)); 
+        currentRedPicks.forEach((id, idx) => tempMap.set(idx, id));
         
-        // Usa o Solver para organizar o time atual da melhor forma possível
         const organizedPicks = reorderEnemyComp(tempMap, enemyRoster.value);
         
         const filledRoles = new Set<string>();
-        const satisfiedPlayerIndices = new Set<number>();
+        const satisfiedPlayerIndices = new Set<number>(); // Indices do roster que já têm boneco
 
-        // Marca quais roles já estão cobertas na configuração ideal
         organizedPicks.forEach((champId, rosterIdx) => {
             const champ = CHAMPIONS_DB.find(c => c.id === champId);
             if (champ) {
-                filledRoles.add(champ.roles[0]); // Considera a role primária preenchida
-                satisfiedPlayerIndices.add(rosterIdx); // Esse jogador já tem boneco
+                // Se o solver colocou esse champ no rosterIdx, essa role está preenchida
+                filledRoles.add(champ.roles[0]); 
+                satisfiedPlayerIndices.add(rosterIdx);
             }
         });
 
-        // 2. BUSCA O MELHOR PICK PARA QUEM FALTA
+        // B. DECISÃO: Escolher o melhor boneco para quem SOBROU
         let bestMove = { slotIdx: step.slotIdx, champId: '', score: -Infinity };
 
         enemyRoster.value.forEach((player, rosterIdx) => {
-            // Se esse jogador já tem um pick atribuído na simulação, ignoramos ele
+            // Se esse player já tem boneco na simulação, pula
             if (satisfiedPlayerIndices.has(rosterIdx)) return;
 
-            // Define o que o time PRECISA
+            // Quais roles faltam?
             const missingRoles = ['TOP', 'JUNGLE', 'MID', 'ADC', 'SUPPORT'].filter(r => !filledRoles.has(r));
 
-            // Pergunta para a IA: Qual o melhor champ para este jogador específico?
+            // Pede sugestão pro DraftEngine
             const result = getSmartPick(player, takenChamps.value, currentRedPicks);
             let modifiedScore = result.score;
             
             const pickChamp = CHAMPIONS_DB.find(c => c.id === result.id);
 
             if (pickChamp) {
-                // --- REGRAS DE OURO DA COMPOSIÇÃO ---
+                // REGRA 1: Se a role principal desse boneco já tá preenchida, penaliza (-500)
+                // (Exceto se for Flex e a gente precisar da secondary role dele)
+                const isMainRoleFilled = filledRoles.has(pickChamp.roles[0]);
+                const canFillMissing = pickChamp.roles.some(r => missingRoles.includes(r));
 
-                // A. REGRA ANTI-DUPLICATA: Se a role principal já existe, penaliza muito (-500)
-                // Isso evita 2 ADCs ou 2 Junglers.
-                if (filledRoles.has(pickChamp.roles[0])) {
-                    modifiedScore -= 500;
+                if (isMainRoleFilled && !canFillMissing) {
+                    modifiedScore -= 500; 
                 }
 
-                // B. REGRA DE NECESSIDADE: Se o jogador é da role que falta, e o boneco é dessa role -> Bônus (+200)
-                if (player.role === pickChamp.roles[0] && missingRoles.includes(player.role)) {
+                // REGRA 2: Se esse boneco preenche a role que falta pro player, Bônus (+200)
+                if (pickChamp.roles.includes(player.role as any) && missingRoles.includes(player.role)) {
                     modifiedScore += 200;
-                }
-
-                // C. REGRA DE OFF-ROLE: Se o boneco nem sequer serve para as roles que faltam -> Penaliza (-100)
-                const champCanFillMissing = pickChamp.roles.some(r => missingRoles.includes(r));
-                if (!champCanFillMissing) {
-                    modifiedScore -= 100;
                 }
             }
 
-            // Guarda o melhor movimento encontrado entre todos os jogadores pendentes
             if (modifiedScore > bestMove.score) {
                 bestMove = { slotIdx: rosterIdx, champId: result.id, score: modifiedScore };
             }
         });
 
-        // 3. APLICA O PICK
+        // Aplica o pick
         if (bestMove.champId) {
             redPicks.value.set(step.slotIdx, bestMove.champId);
         } else {
-            // Fallback de Emergência: Pega qualquer boneco que sirva numa role faltante
+            // Fallback de emergência (pega qualquer um da role que falta)
             const missing = ['TOP', 'JUNGLE', 'MID', 'ADC', 'SUPPORT'].filter(r => !filledRoles.has(r));
             const emergencyChamp = filteredChampions.value.find(c => missing.includes(c.roles[0]));
-            
-            if (emergencyChamp) {
-                redPicks.value.set(step.slotIdx, emergencyChamp.id);
-            } else {
-                // Último caso: Aleatório (não deve acontecer com a DB cheia)
-                const rnd = filteredChampions.value[0];
-                if (rnd) redPicks.value.set(step.slotIdx, rnd.id);
-            }
+            if (emergencyChamp) redPicks.value.set(step.slotIdx, emergencyChamp.id);
+            else redPicks.value.set(step.slotIdx, filteredChampions.value[0]?.id);
         }
         advanceTurn();
     }

@@ -2,7 +2,6 @@ export type ChampionRole = 'TOP' | 'JUNGLE' | 'MID' | 'ADC' | 'SUPPORT';
 export type DamageType = 'AD' | 'AP' | 'MIXED' | 'TRUE' | 'TANK';
 export type ChampionClass = 'TANK' | 'FIGHTER' | 'ASSASSIN' | 'MAGE' | 'MARKSMAN' | 'ENCHANTER' | 'SPECIALIST';
 
-// Tags para o Sistema de Draft
 export type ChampionTag = 
     | 'NEEDS_KNOCKUP' | 'PROVIDES_KNOCKUP' | 'WOMBO_ENABLER'
     | 'HARD_ENGAGE' | 'DISENGAGE' | 'LOCKDOWN'
@@ -27,16 +26,15 @@ export interface Champion {
     class: ChampionClass;
     tags: ChampionTag[]; 
     damageType: DamageType;
-    difficulty: number; 
-    earlyGame: number;  
-    midGame: number;   
-    lateGame: number;  
+    difficulty: number;
+    earlyGame: number;
+    midGame: number;
+    lateGame: number;
 }
 
 export const CHAMPIONS_DB: Champion[] = [
-    // --- TOP LANERS ---
+    // TOP
     { id: 'Aatrox', name: 'Aatrox', roles: ['TOP'], class: 'FIGHTER', tags: ['DIVER', 'EARLY_BULLY'], damageType: 'AD', difficulty: 2, earlyGame: 7, midGame: 9, lateGame: 6 },
-    { id: 'Ambessa', name: 'Ambessa', roles: ['TOP', 'JUNGLE'], class: 'FIGHTER', tags: ['DIVER', 'SKIRMISHER'], damageType: 'AD', difficulty: 3, earlyGame: 8, midGame: 8, lateGame: 5 },
     { id: 'Camille', name: 'Camille', roles: ['TOP'], class: 'FIGHTER', tags: ['DIVER', 'ISOLATION', 'SPLIT_PUSHER'], damageType: 'AD', difficulty: 3, earlyGame: 5, midGame: 8, lateGame: 9 },
     { id: 'Chogath', name: 'Cho\'Gath', roles: ['TOP', 'MID'], class: 'TANK', tags: ['SCALING', 'EXECUTE', 'PROVIDES_KNOCKUP', 'TRUE_DAMAGE'], damageType: 'AP', difficulty: 1, earlyGame: 4, midGame: 7, lateGame: 10 },
     { id: 'Darius', name: 'Darius', roles: ['TOP'], class: 'FIGHTER', tags: ['LANE_BULLY', 'DIVER'], damageType: 'AD', difficulty: 1, earlyGame: 9, midGame: 7, lateGame: 4 },
@@ -50,12 +48,12 @@ export const CHAMPIONS_DB: Champion[] = [
     { id: 'Irelia', name: 'Irelia', roles: ['TOP', 'MID'], class: 'FIGHTER', tags: ['DIVER', 'HYPER_CARRY'], damageType: 'AD', difficulty: 3, earlyGame: 6, midGame: 9, lateGame: 7 },
     { id: 'Jax', name: 'Jax', roles: ['TOP', 'JUNGLE'], class: 'FIGHTER', tags: ['HYPER_CARRY', 'SPLIT_PUSHER'], damageType: 'MIXED', difficulty: 2, earlyGame: 4, midGame: 8, lateGame: 10 },
     { id: 'Jayce', name: 'Jayce', roles: ['TOP', 'MID'], class: 'FIGHTER', tags: ['POKE', 'SIEGE', 'LANE_BULLY'], damageType: 'AD', difficulty: 3, earlyGame: 9, midGame: 8, lateGame: 5 },
+    { id: 'Kante', name: 'K\'Sante', roles: ['TOP'], class: 'TANK', tags: ['PEEL', 'ISOLATION', 'PROVIDES_KNOCKUP'], damageType: 'TANK', difficulty: 3, earlyGame: 6, midGame: 8, lateGame: 7 },
     { id: 'Kayle', name: 'Kayle', roles: ['TOP', 'MID'], class: 'SPECIALIST', tags: ['HYPER_CARRY', 'SCALING'], damageType: 'MIXED', difficulty: 2, earlyGame: 2, midGame: 6, lateGame: 10 },
     { id: 'Kennen', name: 'Kennen', roles: ['TOP', 'MID'], class: 'MAGE', tags: ['WOMBO_ENABLER', 'AOE', 'HARD_ENGAGE', 'CC_RELIANT'], damageType: 'AP', difficulty: 2, earlyGame: 7, midGame: 9, lateGame: 7 },
     { id: 'Kled', name: 'Kled', roles: ['TOP'], class: 'FIGHTER', tags: ['HARD_ENGAGE', 'DIVER', 'GLOBAL'], damageType: 'AD', difficulty: 2, earlyGame: 8, midGame: 7, lateGame: 4 },
-    { id: 'KSante', name: 'K\'Sante', roles: ['TOP'], class: 'TANK', tags: ['PEEL', 'ISOLATION', 'PROVIDES_KNOCKUP'], damageType: 'TANK', difficulty: 3, earlyGame: 6, midGame: 8, lateGame: 7 },
     { id: 'Malphite', name: 'Malphite', roles: ['TOP', 'MID'], class: 'TANK', tags: ['HARD_ENGAGE', 'PROVIDES_KNOCKUP', 'WOMBO_ENABLER'], damageType: 'AP', difficulty: 1, earlyGame: 4, midGame: 9, lateGame: 8 },
-    { id: 'Maokai', name: 'Maokai', roles: ['SUPPORT', 'JUNGLE', 'TOP'], class: 'TANK', tags: ['HARD_ENGAGE', 'PEEL', 'PROVIDES_KNOCKUP', 'CONTROL'], damageType: 'AP', difficulty: 1, earlyGame: 5, midGame: 8, lateGame: 8 },
+    { id: 'Maokai', name: 'Maokai', roles: ['JUNGLE', 'SUPPORT', 'TOP'], class: 'TANK', tags: ['HARD_ENGAGE', 'PEEL', 'PROVIDES_KNOCKUP', 'CONTROL'], damageType: 'AP', difficulty: 1, earlyGame: 5, midGame: 8, lateGame: 8 },
     { id: 'Mordekaiser', name: 'Mordekaiser', roles: ['TOP'], class: 'FIGHTER', tags: ['ISOLATION', 'JUGGERNAUT'], damageType: 'AP', difficulty: 1, earlyGame: 6, midGame: 8, lateGame: 7 },
     { id: 'Nasus', name: 'Nasus', roles: ['TOP'], class: 'FIGHTER', tags: ['SCALING', 'SPLIT_PUSHER'], damageType: 'AD', difficulty: 1, earlyGame: 3, midGame: 6, lateGame: 10 },
     { id: 'Ornn', name: 'Ornn', roles: ['TOP'], class: 'TANK', tags: ['HARD_ENGAGE', 'PROVIDES_KNOCKUP', 'WOMBO_ENABLER'], damageType: 'TANK', difficulty: 2, earlyGame: 6, midGame: 9, lateGame: 9 },
@@ -79,9 +77,8 @@ export const CHAMPIONS_DB: Champion[] = [
     { id: 'Yasuo', name: 'Yasuo', roles: ['MID', 'TOP', 'ADC'], class: 'FIGHTER', tags: ['NEEDS_KNOCKUP', 'HYPER_CARRY'], damageType: 'AD', difficulty: 3, earlyGame: 6, midGame: 9, lateGame: 9 },
     { id: 'Yone', name: 'Yone', roles: ['MID', 'TOP'], class: 'FIGHTER', tags: ['PROVIDES_KNOCKUP', 'HYPER_CARRY', 'DIVER'], damageType: 'MIXED', difficulty: 3, earlyGame: 5, midGame: 8, lateGame: 10 },
     { id: 'Yorick', name: 'Yorick', roles: ['TOP'], class: 'FIGHTER', tags: ['SPLIT_PUSHER', 'SIEGE'], damageType: 'AD', difficulty: 2, earlyGame: 6, midGame: 8, lateGame: 8 },
-    { id: 'Zaahen', name: 'Zaahen', roles: ['TOP', 'JUNGLE'], class: 'FIGHTER', tags: ['DIVER', 'JUGGERNAUT', 'REVIVE'], damageType: 'AD', difficulty: 2, earlyGame: 5, midGame: 9, lateGame: 9 },
 
-    // --- JUNGLERS ---
+    // JUNGLE
     { id: 'Amumu', name: 'Amumu', roles: ['JUNGLE', 'SUPPORT'], class: 'TANK', tags: ['HARD_ENGAGE', 'WOMBO_ENABLER'], damageType: 'AP', difficulty: 1, earlyGame: 4, midGame: 8, lateGame: 8 },
     { id: 'Belveth', name: 'Bel\'Veth', roles: ['JUNGLE'], class: 'FIGHTER', tags: ['HYPER_CARRY', 'SIEGE'], damageType: 'AD', difficulty: 2, earlyGame: 5, midGame: 9, lateGame: 9 },
     { id: 'Briar', name: 'Briar', roles: ['JUNGLE', 'TOP'], class: 'FIGHTER', tags: ['DIVER', 'GLOBAL'], damageType: 'AD', difficulty: 2, earlyGame: 7, midGame: 9, lateGame: 6 },
@@ -107,7 +104,7 @@ export const CHAMPIONS_DB: Champion[] = [
     { id: 'Nunu', name: 'Nunu & Willump', roles: ['JUNGLE'], class: 'TANK', tags: ['OBJECTIVE_CONTROL', 'HARD_ENGAGE'], damageType: 'AP', difficulty: 1, earlyGame: 8, midGame: 7, lateGame: 6 },
     { id: 'Olaf', name: 'Olaf', roles: ['JUNGLE', 'TOP'], class: 'FIGHTER', tags: ['DIVER', 'EARLY_BULLY'], damageType: 'TRUE', difficulty: 2, earlyGame: 9, midGame: 7, lateGame: 4 },
     { id: 'Rammus', name: 'Rammus', roles: ['JUNGLE'], class: 'TANK', tags: ['HARD_ENGAGE', 'ROAMER'], damageType: 'TANK', difficulty: 1, earlyGame: 6, midGame: 7, lateGame: 6 },
-    { id: 'RekSai', name: 'Rek\'Sai', roles: ['JUNGLE'], class: 'FIGHTER', tags: ['EARLY_BULLY', 'PROVIDES_KNOCKUP'], damageType: 'AD', difficulty: 2, earlyGame: 9, midGame: 7, lateGame: 4 },
+    { id: 'Reksai', name: 'Rek\'Sai', roles: ['JUNGLE'], class: 'FIGHTER', tags: ['EARLY_BULLY', 'PROVIDES_KNOCKUP'], damageType: 'AD', difficulty: 2, earlyGame: 9, midGame: 7, lateGame: 4 },
     { id: 'Rengar', name: 'Rengar', roles: ['JUNGLE', 'TOP'], class: 'ASSASSIN', tags: ['ASSASSIN', 'ONE_SHOT'], damageType: 'AD', difficulty: 3, earlyGame: 6, midGame: 9, lateGame: 7 },
     { id: 'Sejuani', name: 'Sejuani', roles: ['JUNGLE'], class: 'TANK', tags: ['HARD_ENGAGE', 'WOMBO_ENABLER', 'PROVIDES_KNOCKUP'], damageType: 'TANK', difficulty: 2, earlyGame: 6, midGame: 8, lateGame: 8 },
     { id: 'Shaco', name: 'Shaco', roles: ['JUNGLE', 'SUPPORT'], class: 'ASSASSIN', tags: ['ASSASSIN', 'TRICKSTER'], damageType: 'AD', difficulty: 3, earlyGame: 8, midGame: 7, lateGame: 5 },
@@ -123,14 +120,13 @@ export const CHAMPIONS_DB: Champion[] = [
     { id: 'Zac', name: 'Zac', roles: ['JUNGLE', 'TOP'], class: 'TANK', tags: ['HARD_ENGAGE', 'PROVIDES_KNOCKUP'], damageType: 'TANK', difficulty: 2, earlyGame: 5, midGame: 9, lateGame: 8 },
     { id: 'Zed', name: 'Zed', roles: ['MID', 'JUNGLE'], class: 'ASSASSIN', tags: ['ASSASSIN', 'ROAMER'], damageType: 'AD', difficulty: 3, earlyGame: 6, midGame: 9, lateGame: 6 },
 
-    // --- MID LANERS ---
+    // MID
     { id: 'Ahri', name: 'Ahri', roles: ['MID'], class: 'MAGE', tags: ['ASSASSIN', 'ROAMER', 'PICK'], damageType: 'AP', difficulty: 2, earlyGame: 6, midGame: 9, lateGame: 7 },
     { id: 'Akali', name: 'Akali', roles: ['MID', 'TOP'], class: 'ASSASSIN', tags: ['ASSASSIN', 'DIVER'], damageType: 'AP', difficulty: 3, earlyGame: 5, midGame: 10, lateGame: 7 },
     { id: 'Akshan', name: 'Akshan', roles: ['MID', 'TOP'], class: 'MARKSMAN', tags: ['ROAMER', 'REVIVE'], damageType: 'AD', difficulty: 3, earlyGame: 9, midGame: 8, lateGame: 5 },
     { id: 'Anivia', name: 'Anivia', roles: ['MID'], class: 'MAGE', tags: ['CONTROL', 'WAVE_CLEAR', 'SCALING'], damageType: 'AP', difficulty: 3, earlyGame: 4, midGame: 8, lateGame: 10 },
     { id: 'Annie', name: 'Annie', roles: ['MID', 'SUPPORT'], class: 'MAGE', tags: ['BURST', 'HARD_ENGAGE'], damageType: 'AP', difficulty: 1, earlyGame: 6, midGame: 8, lateGame: 7 },
     { id: 'AurelionSol', name: 'Aurelion Sol', roles: ['MID'], class: 'MAGE', tags: ['SCALING', 'WOMBO_ENABLER', 'GLOBAL'], damageType: 'AP', difficulty: 2, earlyGame: 3, midGame: 8, lateGame: 10 },
-    { id: 'Aurora', name: 'Aurora', roles: ['MID', 'TOP'], class: 'MAGE', tags: ['ROAMER', 'SKIRMISHER', 'STEALTH'], damageType: 'AP', difficulty: 2, earlyGame: 6, midGame: 9, lateGame: 8 },
     { id: 'Azir', name: 'Azir', roles: ['MID'], class: 'MAGE', tags: ['SCALING', 'HYPER_CARRY', 'SHUFFLE'], damageType: 'AP', difficulty: 3, earlyGame: 4, midGame: 8, lateGame: 10 },
     { id: 'Cassiopeia', name: 'Cassiopeia', roles: ['MID', 'TOP'], class: 'MAGE', tags: ['HYPER_CARRY', 'DISENGAGE'], damageType: 'AP', difficulty: 3, earlyGame: 5, midGame: 8, lateGame: 10 },
     { id: 'Corki', name: 'Corki', roles: ['MID', 'ADC'], class: 'MARKSMAN', tags: ['POKE', 'SIEGE'], damageType: 'MIXED', difficulty: 2, earlyGame: 5, midGame: 9, lateGame: 8 },
@@ -144,7 +140,6 @@ export const CHAMPIONS_DB: Champion[] = [
     { id: 'Lissandra', name: 'Lissandra', roles: ['MID'], class: 'MAGE', tags: ['HARD_ENGAGE', 'CC_RELIANT'], damageType: 'AP', difficulty: 2, earlyGame: 6, midGame: 8, lateGame: 8 },
     { id: 'Lux', name: 'Lux', roles: ['SUPPORT', 'MID'], class: 'MAGE', tags: ['POKE', 'BURST'], damageType: 'AP', difficulty: 1, earlyGame: 7, midGame: 8, lateGame: 7 },
     { id: 'Malzahar', name: 'Malzahar', roles: ['MID'], class: 'MAGE', tags: ['LOCKDOWN', 'WAVE_CLEAR'], damageType: 'AP', difficulty: 1, earlyGame: 5, midGame: 8, lateGame: 8 },
-    { id: 'Mel', name: 'Mel', roles: ['MID', 'SUPPORT'], class: 'MAGE', tags: ['CONTROL', 'POKE', 'SCALING'], damageType: 'AP', difficulty: 2, earlyGame: 5, midGame: 9, lateGame: 9 },
     { id: 'Naafiri', name: 'Naafiri', roles: ['MID', 'JUNGLE'], class: 'ASSASSIN', tags: ['ASSASSIN', 'ROAMER', 'DIVER'], damageType: 'AD', difficulty: 1, earlyGame: 7, midGame: 9, lateGame: 6 },
     { id: 'Neeko', name: 'Neeko', roles: ['MID', 'SUPPORT'], class: 'MAGE', tags: ['HARD_ENGAGE', 'TRICKSTER'], damageType: 'AP', difficulty: 2, earlyGame: 8, midGame: 8, lateGame: 6 },
     { id: 'Orianna', name: 'Orianna', roles: ['MID'], class: 'MAGE', tags: ['CONTROL', 'WOMBO_ENABLER', 'PROVIDES_KNOCKUP'], damageType: 'AP', difficulty: 2, earlyGame: 6, midGame: 10, lateGame: 9 },
@@ -163,7 +158,7 @@ export const CHAMPIONS_DB: Champion[] = [
     { id: 'Ziggs', name: 'Ziggs', roles: ['ADC', 'MID'], class: 'MAGE', tags: ['POKE', 'SIEGE', 'WAVE_CLEAR'], damageType: 'AP', difficulty: 2, earlyGame: 7, midGame: 8, lateGame: 7 },
     { id: 'Zoe', name: 'Zoe', roles: ['MID'], class: 'MAGE', tags: ['POKE', 'BURST', 'PICK'], damageType: 'AP', difficulty: 3, earlyGame: 9, midGame: 8, lateGame: 5 },
 
-    // --- ADC ---
+    // ADC
     { id: 'Aphelios', name: 'Aphelios', roles: ['ADC'], class: 'MARKSMAN', tags: ['HYPER_CARRY', 'IMMOBILE', 'SCALING'], damageType: 'AD', difficulty: 3, earlyGame: 4, midGame: 7, lateGame: 10 },
     { id: 'Ashe', name: 'Ashe', roles: ['ADC', 'SUPPORT'], class: 'MARKSMAN', tags: ['UTILITY', 'HARD_ENGAGE', 'POKE'], damageType: 'AD', difficulty: 1, earlyGame: 7, midGame: 6, lateGame: 7 },
     { id: 'Caitlyn', name: 'Caitlyn', roles: ['ADC'], class: 'MARKSMAN', tags: ['LANE_BULLY', 'SIEGE', 'POKE'], damageType: 'AD', difficulty: 2, earlyGame: 9, midGame: 6, lateGame: 9 },
@@ -184,10 +179,9 @@ export const CHAMPIONS_DB: Champion[] = [
     { id: 'Twitch', name: 'Twitch', roles: ['ADC', 'JUNGLE'], class: 'MARKSMAN', tags: ['ASSASSIN', 'HYPER_CARRY', 'STEALTH'], damageType: 'AD', difficulty: 2, earlyGame: 3, midGame: 7, lateGame: 10 },
     { id: 'Varus', name: 'Varus', roles: ['ADC', 'MID'], class: 'MARKSMAN', tags: ['POKE', 'CC_RELIANT', 'HYBRID'], damageType: 'MIXED', difficulty: 2, earlyGame: 7, midGame: 8, lateGame: 7 },
     { id: 'Xayah', name: 'Xayah', roles: ['ADC'], class: 'MARKSMAN', tags: ['SAFETY', 'DISENGAGE', 'WAVE_CLEAR'], damageType: 'AD', difficulty: 3, earlyGame: 6, midGame: 9, lateGame: 9 },
-    { id: 'Yunara', name: 'Yunara', roles: ['ADC'], class: 'MARKSMAN', tags: ['HYPER_CARRY', 'SCALING', 'SKIRMISHER'], damageType: 'AD', difficulty: 2, earlyGame: 4, midGame: 9, lateGame: 10 },
     { id: 'Zeri', name: 'Zeri', roles: ['ADC'], class: 'MARKSMAN', tags: ['HYPER_CARRY', 'SKIRMISHER'], damageType: 'MIXED', difficulty: 3, earlyGame: 5, midGame: 9, lateGame: 10 },
 
-    // --- SUPPORTS ---
+    // SUPPORT
     { id: 'Alistar', name: 'Alistar', roles: ['SUPPORT'], class: 'TANK', tags: ['HARD_ENGAGE', 'PEEL', 'PROVIDES_KNOCKUP'], damageType: 'AP', difficulty: 1, earlyGame: 6, midGame: 8, lateGame: 8 },
     { id: 'Bard', name: 'Bard', roles: ['SUPPORT'], class: 'ENCHANTER', tags: ['ROAMER', 'PLAYMAKER', 'CATCH'], damageType: 'AP', difficulty: 3, earlyGame: 7, midGame: 9, lateGame: 8 },
     { id: 'Blitzcrank', name: 'Blitzcrank', roles: ['SUPPORT'], class: 'TANK', tags: ['HOOK', 'PICK', 'PROVIDES_KNOCKUP'], damageType: 'AP', difficulty: 1, earlyGame: 9, midGame: 7, lateGame: 5 },
@@ -209,7 +203,7 @@ export const CHAMPIONS_DB: Champion[] = [
     { id: 'Seraphine', name: 'Seraphine', roles: ['SUPPORT', 'MID', 'ADC'], class: 'MAGE', tags: ['WOMBO_ENABLER', 'SHIELD', 'POKE'], damageType: 'AP', difficulty: 1, earlyGame: 5, midGame: 9, lateGame: 9 },
     { id: 'Sona', name: 'Sona', roles: ['SUPPORT'], class: 'ENCHANTER', tags: ['SCALING', 'WOMBO_ENABLER', 'HEAL'], damageType: 'AP', difficulty: 1, earlyGame: 4, midGame: 8, lateGame: 10 },
     { id: 'Soraka', name: 'Soraka', roles: ['SUPPORT'], class: 'ENCHANTER', tags: ['HEAL', 'GLOBAL', 'POKE'], damageType: 'AP', difficulty: 1, earlyGame: 8, midGame: 7, lateGame: 8 },
-    { id: 'Swain', name: 'Swain', roles: ['SUPPORT', 'MID'], class: 'MAGE', tags: ['DRAIN_TANK', 'HOOK', 'AOE'], damageType: 'AP', difficulty: 2, earlyGame: 7, midGame: 9, lateGame: 7 },
+    { id: 'Swain', name: 'Swain', roles: ['SUPPORT', 'MID', 'TOP'], class: 'MAGE', tags: ['DRAIN_TANK', 'HOOK', 'AOE'], damageType: 'AP', difficulty: 2, earlyGame: 7, midGame: 9, lateGame: 7 },
     { id: 'Taric', name: 'Taric', roles: ['SUPPORT'], class: 'ENCHANTER', tags: ['PEEL', 'INVULNERABILITY', 'RESET'], damageType: 'AP', difficulty: 2, earlyGame: 5, midGame: 8, lateGame: 10 },
     { id: 'Thresh', name: 'Thresh', roles: ['SUPPORT'], class: 'TANK', tags: ['HOOK', 'PEEL', 'PLAYMAKER'], damageType: 'AP', difficulty: 3, earlyGame: 8, midGame: 9, lateGame: 8 },
     { id: 'Yuumi', name: 'Yuumi', roles: ['SUPPORT'], class: 'ENCHANTER', tags: ['UNTARGETABLE', 'SCALING', 'HYPER_CARRY_BUFFER'], damageType: 'AP', difficulty: 1, earlyGame: 4, midGame: 8, lateGame: 10 },

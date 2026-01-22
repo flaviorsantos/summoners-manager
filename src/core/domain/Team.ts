@@ -1,8 +1,5 @@
-export interface TeamStats {
-    wins: number;
-    losses: number;
-    championshipPoints: number;
-}
+import type { Player } from './Player';
+import type { TeamSeasonStats } from './Stats';
 
 export interface Team {
     id: string;
@@ -11,8 +8,10 @@ export interface Team {
     primaryColor: string;
     secondaryColor: string;
     
-    prestige: number;
-    budget: number;
-
-    stats: TeamStats
+    prestige: number; 
+    budget: number;   
+    
+    roster: Player[];
+    
+    stats: TeamSeasonStats;
 }

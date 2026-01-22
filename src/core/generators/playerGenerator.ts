@@ -1,87 +1,66 @@
 import { v4 as uuidv4 } from 'uuid';
-import type { Player, PlayerAttributes, Role, ChampionMastery } from './../domain/Player';
-import { CHAMPIONS_DB, type Champion } from './../domain/Champions'; 
+import type { Player, PlayerRole, PlayerAttributes } from '../domain/Player';
+import { CHAMPIONS_DB } from '../domain/Champions';
 
-const FIRST_NAMES = ["Lee", "Kim", "Park", "Martin", "Rasmus", "Felipe", "Gabriel", "Thiago", "Matheus", "Lucas", "Pedro"];
-const NICKS = ["Faker", "Caps", "Brance", "Titan", "Chovy", "ShowMaker", "Tinowns", "Robo", "Cariok", "Ceos", "Aegis", "Route"];
+const FIRST_NAMES = ['Gabriel', 'Lucas', 'Matheus', 'Felipe', 'Bruno', 'Leonardo', 'Rodrigo', 'Thiago', 'Arthur', 'Davi'];
+const NICKS = ['Robo', 'Tinowns', 'Titan', 'Cariok', 'Ceos', 'Brance', 'Aegis', 'Wizer', 'Route', 'Dynquedo'];
 
-const randomInt = (min: number, max: number) => Math.floor(Math.random() * (max - min + 1) + min);
+export const playerGenerator = {
+    generateRoster(size: number): Player[] {
+        const roles: PlayerRole[] = ['TOP', 'JUNGLE', 'MID', 'ADC', 'SUPPORT'];
+        const roster: Player[] = [];
 
-const generateAttr = (base: number, variation: number = 15):number => {
-    let val = base + randomInt(-variation, variation);
-    return Math.max(1, Math.min(99, val));
-}
+        roles.forEach(role => roster.push(this.generatePlayer(role)));
 
-export const generatePlayer = (forcedRole?: Role): Player => {
-    let role = forcedRole;
-    if (!role) {
-        const roles: Role[] = ['TOP', 'JUNGLE', 'MID', 'ADC', 'SUPPORT'];
-        role = roles[randomInt(0, 4)];
-    }
-
-    const age = randomInt(16, 25);
-    const experienceBuff = (age - 16) * 2;
-    
-    const attributes: PlayerAttributes = {
-        laning: generateAttr(role === 'SUPPORT' ? 50 : 60),
-        farming: generateAttr(role === 'SUPPORT' ? 30 : 70),
-        mechanics: generateAttr(65),
-        reflexes: generateAttr(70 - (age > 24 ? 5 : 0)),
-        aggression: generateAttr(50, 30),
-
-        macro: generateAttr(50 + experienceBuff),
-        roaming: generateAttr(role === 'MID' || role === 'SUPPORT' ? 65 : 50),
-        vision: generateAttr((role === 'SUPPORT' || role === 'JUNGLE' ? 65 : 45) + experienceBuff),
-        shotcalling: generateAttr(40 + experienceBuff),
-        teamfight: generateAttr(60)
-    };
-
-    const values = Object.values(attributes);
-    const overall = Math.round(values.reduce((a, b) => a + b, 0) / values.length);
-
-    const validChamps = CHAMPIONS_DB.filter(c => c.roles.includes(role!));
-    
-    const poolSize = randomInt(3, 6);
-    const championPool: ChampionMastery[] = [];
-    const usedIds = new Set<string>();
-
-    for(let i=0; i < poolSize; i++) {
-        if(validChamps.length === 0) break;
-
-        const randomIdx = randomInt(0, validChamps.length - 1);
-        const champ = validChamps[randomIdx];
-
-        if (!usedIds.has(champ.id)) {
-            usedIds.add(champ.id);
-            championPool.push({
-                championName: champ.name, 
-                masteryLevel: generateAttr(80, 20) 
-            });
+        for(let i = 5; i < size; i++) {
+            roster.push(this.generatePlayer(roles[i % 5]));
         }
-    }
 
-    if (championPool.length === 0) {
-        championPool.push({ championName: "Teemo", masteryLevel: 99 });
-    }
+        return roster;
+    },
 
-    let potential = overall + (age > 22 ? randomInt(0, 5) : randomInt(5, 20));
-
-    return {
-        id: uuidv4(),
-        name: `${FIRST_NAMES[randomInt(0, FIRST_NAMES.length-1)]}`,
-        nickname: `${NICKS[randomInt(0, NICKS.length-1)]}${randomInt(1, 99)}`,
+    generatePlayer(role: PlayerRole): Player {
+        const age = Math.floor(Math.random() * 8) + 17; 
         
-        gender: Math.random() > 0.9 ? 'FEMALE' : 'MALE', 
+        const genAttr = () => Math.floor(Math.random() * 40) + 50; 
+        
+        const attributes: PlayerAttributes = {
+            laning: genAttr(),
+            mechanics: genAttr(),
+            aggression: Math.floor(Math.random() * 100), 
+            positioning: genAttr(),
+            shotcalling: genAttr(),
+            vision: genAttr()
+        };
 
-        age,
-        country: 'KR', 
-        role: role!,
-        team: 'Free Agent',
-        overall,
-        potential,
-        attributes,
-        championPool,
-        contract: { salary: overall * 1000, expires: 1 },
-        matchHistory: []
-    };
-}
+        const overall = Math.floor(
+            (attributes.laning * 1.5 + attributes.mechanics * 1.5 + attributes.positioning + attributes.shotcalling + attributes.vision) / 5.5
+        );
+
+        return {
+            id: uuidv4(),
+            name: `${FIRST_NAMES[Math.floor(Math.random() * FIRST_NAMES.length)]}`,
+            nickname: `${NICKS[Math.floor(Math.random() * NICKS.length)]}`,
+            age,
+            role,
+            attributes,
+            overall,
+            potential: overall + Math.floor(Math.random() * 15),
+            salary: overall * 1000,
+            contractExpires: 2026 + Math.floor(Math.random() * 3),
+            morale: 100,
+            championPool: this.generatePool(role)
+        };
+    },
+
+    generatePool(role: PlayerRole) {
+        const validChamps = CHAMPIONS_DB.filter(c => c.roles.includes(role));
+        const poolSize = 5 + Math.floor(Math.random() * 5);
+        
+        const shuffled = [...validChamps].sort(() => 0.5 - Math.random());
+        return shuffled.slice(0, poolSize).map(c => ({
+            championName: c.name,
+            masteryLevel: Math.floor(Math.random() * 10000) + 500 
+        }));
+    }
+};

@@ -1,65 +1,36 @@
-import { v4 as uuidv4 } from 'uuid';
 import type { Team } from '../domain/Team';
-import type { ScheduleMatch } from '../domain/Schedule';
+import type { Match } from '../domain/Schedule';
 
-export const generateSchedule = (teams: Team[]): ScheduleMatch[] => {
-    const schedule: ScheduleMatch[] = [];
-    const leagueTeams = [...teams];
-    const numRounds = leagueTeams.length - 1; 
-    const halfSize = leagueTeams.length / 2;
-    const teamIds = leagueTeams.map(t => t.id);
-
-    let currentLeagueDay = 4; 
-
-    for (let round = 0; round < numRounds; round++) {
+export const scheduleGenerator = {
+    generate(teams: Team[]) {
+        const schedule = [];
+        const numWeeks = (teams.length - 1) * 2;
         
-        for (let i = 0; i < halfSize; i++) {
-            const home = teamIds[i];
-            const away = teamIds[teamIds.length - 1 - i];
-
+        for (let i = 1; i <= numWeeks; i++) {
             schedule.push({
-                id: uuidv4(),
-                day: currentLeagueDay, 
-                homeTeamId: home,
-                awayTeamId: away,
-                played: false
+                week: i,
+                matches: this.generateRound(teams)
             });
         }
-
-        if (round % 2 === 0) {
-            currentLeagueDay += 1; 
-        } else {
-            currentLeagueDay += 6; 
-        }
-
-        teamIds.splice(1, 0, teamIds.pop()!); 
-    }
-
-    if ((numRounds - 1) % 2 === 0) currentLeagueDay += 6; else currentLeagueDay += 1;
-
-    const firstHalfMatches = [...schedule];
-    
-    const returnSchedule: ScheduleMatch[] = [];
-    
-    for (let round = 0; round < numRounds; round++) {
-        const roundMatches = firstHalfMatches.slice(round * halfSize, (round + 1) * halfSize);
         
-        roundMatches.forEach(match => {
-            returnSchedule.push({
-                id: uuidv4(),
-                day: currentLeagueDay,
-                homeTeamId: match.awayTeamId,
-                awayTeamId: match.homeTeamId,
-                played: false
-            });
-        });
+        return schedule;
+    },
 
-        if (round % 2 === 0) {
-            currentLeagueDay += 1; 
-        } else {
-            currentLeagueDay += 6; 
+    generateRound(teams: Team[]): Match[] {
+        const matches: Match[] = [];
+        const shuffled = [...teams].sort(() => Math.random() - 0.5);
+        
+        for (let i = 0; i < shuffled.length; i += 2) {
+            if (i + 1 < shuffled.length) {
+                matches.push({
+                    id: Math.random().toString(36).substr(2, 9),
+                    blueTeamId: shuffled[i].id,
+                    redTeamId: shuffled[i+1].id,
+                    winner: null,
+                    isPlayed: false
+                });
+            }
         }
+        return matches;
     }
-
-    return [...schedule, ...returnSchedule];
 };
